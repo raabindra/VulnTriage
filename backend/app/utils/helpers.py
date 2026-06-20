@@ -1,0 +1,71 @@
+import re
+
+
+def allowed_file(filename: str, allowed_extensions: set) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_extensions
+
+
+def get_scanner_type(filename: str) -> str | None:
+    """Best-effort scanner detection from filename."""
+    name = filename.lower()
+    if "zap" in name or name.endswith(".xml"):
+        return "zap"
+    if "nuclei" in name or name.endswith(".json"):
+        return "nuclei"
+    if name.endswith(".nessus") or "nessus" in name:
+        return "nessus"
+    return None
+
+
+def normalize_severity(raw: str) -> str:
+    """Map scanner-specific severity labels to unified scale."""
+    if not raw:
+        return "Unknown"
+    r = raw.strip().lower()
+    if r in ("critical", "4"):
+        return "Critical"
+    if r in ("high", "3"):
+        return "High"
+    if r in ("medium", "moderate", "2"):
+        return "Medium"
+    if r in ("low", "1"):
+        return "Low"
+    if r in ("info", "informational", "0", "none"):
+        return "Informational"
+    return "Unknown"
+
+
+def cvss_score_to_severity(score: float) -> str:
+    if score is None:
+        return "Unknown"
+    if score >= 9.0:
+        return "Critical"
+    if score >= 7.0:
+        return "High"
+    if score >= 4.0:
+        return "Medium"
+    if score > 0.0:
+        return "Low"
+    return "Informational"
+
+
+def extract_cwe_id(raw: str) -> str | None:
+    """Extract CWE-NNN from a raw string."""
+    if not raw:
+        return None
+    m = re.search(r"CWE-(\d+)", raw, re.IGNORECASE)
+    return f"CWE-{m.group(1)}" if m else None
+
+
+def extract_cve_id(raw: str) -> str | None:
+    """Extract CVE-YYYY-NNNNN from a raw string."""
+    if not raw:
+        return None
+    m = re.search(r"CVE-\d{4}-\d{4,7}", raw, re.IGNORECASE)
+    return m.group(0).upper() if m else None
+
+
+def sanitize_text(value: str | None, max_len: int = 10000) -> str | None:
+    if not value:
+        return None
+    return str(value).strip()[:max_len]
