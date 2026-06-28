@@ -6,7 +6,8 @@ import { Spinner } from '../components/common/Loading'
 const SCANNER_META = {
   zap:    { label: 'OWASP ZAP',  note: 'Spider + active scan (headless)' },
   nuclei: { label: 'Nuclei',     note: 'Template-based, fast' },
-  nessus: { label: 'Nessus',     note: 'Via API (needs credentials)' },
+  // Nessus is not auto-launched (Essentials/Pro block scan creation via API).
+  // Use it by exporting a .nessus report and uploading it on the Upload page.
 }
 
 export default function AutoScan() {
@@ -105,6 +106,10 @@ export default function AutoScan() {
               )
             })}
           </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Using Nessus? Run it in the Nessus UI, export the <code>.nessus</code> report,
+            and upload it on the Upload page — it flows through the same triage pipeline.
+          </p>
         </div>
 
         {/* Post-scan options */}

@@ -30,7 +30,7 @@ from app.engines.nvd_enrichment import NvdEnrichmentEngine
 from app.engines.cwe_cvss_enrichment import CweCvssEnrichmentEngine
 from app.engines.confidence_engine import ConfidenceEngine
 
-_EXT = {"zap": "xml", "nuclei": "jsonl", "nessus": "nessus"}
+_EXT = {"zap": "xml", "nuclei": "jsonl"}
 
 
 class AutoScanError(RuntimeError):

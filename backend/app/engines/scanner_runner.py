@@ -2,24 +2,26 @@
 Scanner runner — optional orchestration layer (Auto Scan).
 
 VulnTriage's core remains a *triage* system over existing scanner output; this
-module lets the app optionally DRIVE those external scanners against a target and
-collect their native reports, which then feed the normal ingest+triage pipeline.
-It does not implement any scanning itself — it shells out to / calls the real
-tools (OWASP ZAP, Nuclei, Nessus).
+module lets the app optionally DRIVE scanners against a target and collect their
+native reports, which then feed the normal ingest+triage pipeline. It does not
+implement any scanning itself — it shells out to the real tools.
+
+Auto Scan supports **OWASP ZAP** and **Nuclei** (both run headless with no extra
+setup). Nessus is intentionally NOT auto-launched: Nessus Essentials/Professional
+block scan creation via the REST API, so Nessus is used in VulnTriage via the
+normal flow instead — run it in the Nessus UI, export the .nessus file, and
+upload it. (The nessus parser handles that report like any other.)
 
 ⚠️  Active scanning is intrusive. Only run against assets you are authorised to
 test. The orchestrator enforces an authorisation acknowledgement / scope.
 
 Each adapter returns the path to a native report file the existing parsers can
-read (ZAP XML, Nuclei JSONL, Nessus .nessus XML), or raises ScannerError.
+read (ZAP XML, Nuclei JSONL), or raises ScannerError.
 """
 
 import os
-import time
 import shutil
 import subprocess
-
-import requests
 
 # Tool locations (allow override via env for non-standard installs).
 ZAP_BIN = os.environ.get("ZAP_BIN") or shutil.which("zaproxy") or shutil.which("zap.sh")
@@ -29,7 +31,9 @@ NUCLEI_BIN = os.environ.get("NUCLEI_BIN") or shutil.which("nuclei") \
 # Default per-scanner wall-clock limits (seconds); override via env.
 ZAP_TIMEOUT = int(os.environ.get("ZAP_TIMEOUT", "900"))
 NUCLEI_TIMEOUT = int(os.environ.get("NUCLEI_TIMEOUT", "600"))
-NESSUS_TIMEOUT = int(os.environ.get("NESSUS_TIMEOUT", "3600"))
+
+# Scanners Auto Scan can drive. (Nessus is supported via manual export+upload.)
+SUPPORTED_SCANNERS = ("zap", "nuclei")
 
 
 class ScannerError(RuntimeError):
@@ -45,24 +49,13 @@ def _zap_ok() -> bool:
     return bool(ZAP_BIN and os.path.exists(ZAP_BIN))
 
 
-def _nessus_creds() -> tuple[str, str, str] | None:
-    url = os.environ.get("NESSUS_URL", "https://localhost:8834")
-    ak = os.environ.get("NESSUS_ACCESS_KEY")
-    sk = os.environ.get("NESSUS_SECRET_KEY")
-    if ak and sk:
-        return url, ak, sk
-    return None
-
-
 def scanner_availability() -> dict:
-    """Report which scanners can actually run right now."""
+    """Which Auto Scan scanners can actually run right now."""
     return {
-        "nuclei": {"available": _nuclei_ok(), "reason": "" if _nuclei_ok() else "nuclei binary not found"},
-        "zap": {"available": _zap_ok(), "reason": "" if _zap_ok() else "zaproxy/zap.sh not found"},
-        "nessus": {
-            "available": _nessus_creds() is not None,
-            "reason": "" if _nessus_creds() else "set NESSUS_ACCESS_KEY/NESSUS_SECRET_KEY (generate in Nessus UI)",
-        },
+        "zap": {"available": _zap_ok(),
+                "reason": "" if _zap_ok() else "zaproxy/zap.sh not found"},
+        "nuclei": {"available": _nuclei_ok(),
+                   "reason": "" if _nuclei_ok() else "nuclei binary not found"},
     }
 
 
@@ -104,102 +97,16 @@ def run_zap(target: str, out_dir: str) -> str:
     return out
 
 
-# ───────────────────────── Nessus (API) ─────────────────────────
-def _nessus_headers(ak: str, sk: str) -> dict:
-    return {"X-ApiKeys": f"accessKey={ak}; secretKey={sk}",
-            "Content-Type": "application/json"}
-
-
-def _nessus_template_uuid(base: str, headers: dict) -> str:
-    r = requests.get(f"{base}/editor/scan/templates", headers=headers, verify=False, timeout=30)
-    r.raise_for_status()
-    templates = r.json().get("templates", [])
-    for pref in ("basic", "web_app", "advanced"):
-        for t in templates:
-            if t.get("name") == pref:
-                return t["uuid"]
-    if templates:
-        return templates[0]["uuid"]
-    raise ScannerError("no Nessus scan templates available")
-
-
-def run_nessus(target: str, out_dir: str) -> str:
-    creds = _nessus_creds()
-    if not creds:
-        raise ScannerError("Nessus credentials not set (NESSUS_ACCESS_KEY/NESSUS_SECRET_KEY)")
-    base, ak, sk = creds
-    headers = _nessus_headers(ak, sk)
-    deadline = time.time() + NESSUS_TIMEOUT
-
-    # Nessus scans a host/IP, not a URL — extract the hostname from a URL target.
-    from urllib.parse import urlparse
-    host = urlparse(target).hostname or target
-
-    try:
-        uuid = _nessus_template_uuid(base, headers)
-        # Create scan. Nessus *Essentials* (and some Professional builds) block
-        # scan creation via the REST API — the server resets the connection on
-        # POST /scans even though auth/GETs work. Detect that and explain.
-        payload = {"uuid": uuid, "settings": {
-            "name": f"VulnTriage auto scan {host}", "enabled": True, "text_targets": host}}
-        try:
-            r = requests.post(f"{base}/scans", json=payload, headers=headers,
-                              verify=False, timeout=30)
-        except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
-            raise ScannerError(
-                "Nessus refused scan creation via the API (connection reset on "
-                "POST /scans). This is the Nessus Essentials/Professional API "
-                "restriction — automated scan creation needs Nessus Manager or "
-                "Tenable.io. Workaround: run the scan in the Nessus UI, export the "
-                ".nessus file, and upload it to VulnTriage normally.")
-        r.raise_for_status()
-        scan_id = r.json()["scan"]["id"]
-        requests.post(f"{base}/scans/{scan_id}/launch", headers=headers, verify=False, timeout=30).raise_for_status()
-
-        # Poll until complete
-        while True:
-            if time.time() > deadline:
-                raise ScannerError(f"Nessus scan timed out after {NESSUS_TIMEOUT}s")
-            r = requests.get(f"{base}/scans/{scan_id}", headers=headers, verify=False, timeout=30)
-            status = r.json().get("info", {}).get("status", "")
-            if status == "completed":
-                break
-            if status in ("canceled", "aborted"):
-                raise ScannerError(f"Nessus scan {status}")
-            time.sleep(15)
-
-        # Export as .nessus and download
-        r = requests.post(f"{base}/scans/{scan_id}/export", json={"format": "nessus"},
-                          headers=headers, verify=False, timeout=30)
-        r.raise_for_status()
-        file_id = r.json()["file"]
-        while True:
-            if time.time() > deadline:
-                raise ScannerError("Nessus export timed out")
-            r = requests.get(f"{base}/scans/{scan_id}/export/{file_id}/status",
-                             headers=headers, verify=False, timeout=30)
-            if r.json().get("status") == "ready":
-                break
-            time.sleep(5)
-        r = requests.get(f"{base}/scans/{scan_id}/export/{file_id}/download",
-                         headers=headers, verify=False, timeout=120)
-        r.raise_for_status()
-    except requests.RequestException as e:
-        raise ScannerError(f"Nessus API error: {e}")
-
-    out = os.path.join(out_dir, "nessus.nessus")
-    with open(out, "wb") as f:
-        f.write(r.content)
-    return out
-
-
-_RUNNERS = {"nuclei": run_nuclei, "zap": run_zap, "nessus": run_nessus}
+_RUNNERS = {"nuclei": run_nuclei, "zap": run_zap}
 
 
 def run_scanner(name: str, target: str, out_dir: str) -> str:
     """Run one scanner by name and return its native report path."""
     runner = _RUNNERS.get(name)
     if not runner:
-        raise ScannerError(f"unknown scanner '{name}'")
+        raise ScannerError(
+            f"'{name}' is not an Auto Scan scanner. Supported: "
+            f"{', '.join(SUPPORTED_SCANNERS)}. (Nessus: export a .nessus report "
+            f"from the Nessus UI and upload it instead.)")
     os.makedirs(out_dir, exist_ok=True)
     return runner(target, out_dir)

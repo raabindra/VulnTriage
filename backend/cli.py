@@ -324,7 +324,8 @@ def _print_summary(rpt, user, top: int) -> None:
 @cli.command()
 @click.argument("target")
 @click.option("-s", "--scanners", default="zap,nuclei",
-              help="Comma-separated scanners to run: zap,nuclei,nessus (default: zap,nuclei).")
+              help="Comma-separated scanners to run: zap,nuclei (default: both). "
+                   "Nessus is not auto-launched — export a .nessus report and upload it.")
 @click.option("--authorise", "--authorize", "authorise", is_flag=True, default=False,
               help="REQUIRED acknowledgement that you are authorised to actively scan TARGET.")
 @click.option("--exploits", "search_exploits", is_flag=True, default=False,

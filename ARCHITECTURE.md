@@ -18,9 +18,10 @@ PoC checks, and produces a PDF triage report.
 The **core** of VulnTriage is a *triage* system over existing scanner output (it does not implement scanning). An **optional Auto Scan orchestration layer** can additionally *drive* the external tools (OWASP ZAP, Nuclei, Nessus) against a target and feed their native reports into the same pipeline — it shells out to / calls the real tools, it is not itself a scanner. Active scanning is intrusive and gated behind an explicit authorisation acknowledgement.
 
 ## Auto Scan (`engines/scanner_runner.py`, `engines/auto_scan.py`)
-- **Runners:** Nuclei (`nuclei -u <t> -jsonl`), ZAP (headless `zaproxy -cmd -quickurl`), Nessus (REST API: create→launch→poll→export `.nessus`; needs `NESSUS_URL`/`NESSUS_ACCESS_KEY`/`NESSUS_SECRET_KEY`, else skipped). Availability via `scanner_availability()`; per-scanner timeouts via env (`ZAP_TIMEOUT` etc.).
+- **Runners (auto-launched): ZAP + Nuclei only** — Nuclei (`nuclei -u <t> -jsonl`), ZAP (headless `zaproxy -cmd -quickurl`). `SUPPORTED_SCANNERS = ("zap","nuclei")`; availability via `scanner_availability()`; per-scanner timeouts via env (`ZAP_TIMEOUT`/`NUCLEI_TIMEOUT`).
+- **Nessus is NOT auto-launched:** Nessus Essentials/Professional block scan creation via the REST API (POST /scans resets). Use Nessus via the normal flow — export a `.nessus` report from the Nessus UI and upload it (the nessus parser + pipeline handle it like any other report).
 - **Orchestrator** runs each scanner → ingests each native report via `parse_scanner_file` → runs the **unified** pipeline once across all uploads, so cross-scanner duplicates merge (↑ scanner_count → ↑ confidence). Requires `authorise=True`.
-- **Surfaces:** CLI `python cli.py autoscan <target> -s zap,nuclei,nessus --authorise [--exploits] [--poc] [--scope ...]`; web `GET /api/pipeline/scanners` + `POST /api/pipeline/autoscan`; GUI "Auto Scan" page (`frontend/src/pages/AutoScan.jsx`) with target + scanner checkboxes + authorisation tick.
+- **Surfaces:** CLI `python cli.py autoscan <target> -s zap,nuclei --authorise [--exploits] [--poc] [--scope ...]`; web `GET /api/pipeline/scanners` + `POST /api/pipeline/autoscan`; GUI "Auto Scan" page (`frontend/src/pages/AutoScan.jsx`) with target + scanner checkboxes + authorisation tick.
 
 ## Pipeline (the core engine, in `backend/app/engines/`)
 `normalisation → deduplication (SHA-256 merge) → cwe_mapper → nvd_enrichment → cwe_cvss_enrichment → ml/predictor → confidence_engine → (optional) poc_validator → report_generator`

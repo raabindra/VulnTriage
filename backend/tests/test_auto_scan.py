@@ -18,9 +18,15 @@ _SAMPLE = os.path.join(
 
 def test_scanner_availability_shape():
     a = scanner_availability()
-    assert set(a) == {"nuclei", "zap", "nessus"}
+    assert set(a) == {"nuclei", "zap"}   # Nessus is not auto-launched
     for v in a.values():
         assert "available" in v and "reason" in v
+
+
+def test_nessus_not_an_autoscan_scanner():
+    from app.engines.scanner_runner import run_scanner, ScannerError
+    with pytest.raises(ScannerError):
+        run_scanner("nessus", "http://t", "/tmp")
 
 
 def test_autoscan_requires_authorisation(app):
