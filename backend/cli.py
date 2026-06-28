@@ -343,10 +343,13 @@ def autoscan(target, scanners, authorise, search_exploits, run_poc, poc_scope, o
     app = make_app(db_url)
     with app.app_context():
         import uuid as _uuid
+        import app.models  # noqa: F401  (register all tables for create_all)
         from app import db
         from app.models.user import User
         from app.models.report import Report
         from app.engines.auto_scan import AutoScanOrchestrator, AutoScanError
+
+        db.create_all()
 
         if not authorise:
             click.echo(_c("Refusing to scan: pass --authorise to confirm you are "
