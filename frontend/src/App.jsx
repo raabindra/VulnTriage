@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Upload from './pages/Upload'
+import AutoScan from './pages/AutoScan'
 import Findings from './pages/Findings'
 import FindingDetail from './pages/FindingDetail'
 import Reports from './pages/Reports'
@@ -30,6 +31,7 @@ export default function App() {
         <Route index             element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard"  element={<Dashboard />} />
         <Route path="upload"     element={<Upload />} />
+        <Route path="autoscan"   element={<AutoScan />} />
         <Route path="findings"   element={<Findings />} />
         <Route path="findings/:id" element={<FindingDetail />} />
         <Route path="reports"    element={<Reports />} />

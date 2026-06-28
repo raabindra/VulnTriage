@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   HomeIcon,
   ArrowUpTrayIcon,
+  BoltIcon,
   BugAntIcon,
   DocumentChartBarIcon,
   ShieldCheckIcon,
@@ -11,6 +12,7 @@ import clsx from 'clsx'
 const NAV = [
   { to: '/dashboard', icon: HomeIcon,              label: 'Dashboard' },
   { to: '/upload',    icon: ArrowUpTrayIcon,        label: 'Upload Scans' },
+  { to: '/autoscan',  icon: BoltIcon,               label: 'Auto Scan' },
   { to: '/findings',  icon: BugAntIcon,             label: 'Findings' },
   { to: '/reports',   icon: DocumentChartBarIcon,   label: 'Reports' },
 ]

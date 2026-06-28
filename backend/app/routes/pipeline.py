@@ -126,3 +126,36 @@ def run_pipeline(upload_id: int):
 def ml_info():
     predictor = VulnerabilityPredictor()
     return jsonify(predictor.model_info()), 200
+
+
+@pipeline_bp.get("/scanners")
+@jwt_required()
+def scanners_status():
+    """Which scanners can auto mode actually run right now."""
+    from app.engines.scanner_runner import scanner_availability
+    return jsonify(scanner_availability()), 200
+
+
+@pipeline_bp.post("/autoscan")
+@jwt_required()
+def auto_scan_route():
+    """Optional orchestration: run scanners against a target, then triage."""
+    user_id = int(get_jwt_identity())
+    body = request.json or {}
+    target = (body.get("target") or "").strip()
+    scanners = body.get("scanners") or []
+    if not target:
+        return jsonify({"error": "target is required"}), 400
+    if not body.get("authorise"):
+        return jsonify({"error": "authorisation required: confirm you may actively scan this target"}), 400
+
+    from app.engines.auto_scan import AutoScanOrchestrator, AutoScanError
+    try:
+        results = AutoScanOrchestrator().run(
+            target=target, scanners=scanners, user_id=user_id, authorise=True,
+            search_exploits=bool(body.get("search_exploits")),
+            run_poc=bool(body.get("run_poc")), poc_scope=body.get("poc_scope"),
+        )
+    except AutoScanError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"autoscan_results": results}), 200

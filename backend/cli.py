@@ -322,6 +322,74 @@ def _print_summary(rpt, user, top: int) -> None:
 
 
 @cli.command()
+@click.argument("target")
+@click.option("-s", "--scanners", default="zap,nuclei",
+              help="Comma-separated scanners to run: zap,nuclei,nessus (default: zap,nuclei).")
+@click.option("--authorise", "--authorize", "authorise", is_flag=True, default=False,
+              help="REQUIRED acknowledgement that you are authorised to actively scan TARGET.")
+@click.option("--exploits", "search_exploits", is_flag=True, default=False,
+              help="Look up public exploits (searchsploit) after scanning.")
+@click.option("--poc/--no-poc", "run_poc", default=False, help="Run PoC validation after scanning.")
+@click.option("--scope", "poc_scope", default=None, help="Authorised host(s) for PoC probes.")
+@click.option("-o", "--output", type=click.Path(dir_okay=False), help="Where to write the PDF report.")
+@click.option("--db", "db_url", help="Database URL (default: ./vulntriage.db SQLite).")
+@click.option("--top", default=10, show_default=True, help="Findings to list in the summary.")
+def autoscan(target, scanners, authorise, search_exploits, run_poc, poc_scope, output, db_url, top):
+    """Run scanners against TARGET, then triage the combined results.
+
+    Example: vulntriage autoscan http://localhost:3000 -s zap,nuclei --authorise
+    """
+    scanner_list = [s.strip() for s in scanners.split(",") if s.strip()]
+    app = make_app(db_url)
+    with app.app_context():
+        import uuid as _uuid
+        from app import db
+        from app.models.user import User
+        from app.models.report import Report
+        from app.engines.auto_scan import AutoScanOrchestrator, AutoScanError
+
+        if not authorise:
+            click.echo(_c("Refusing to scan: pass --authorise to confirm you are "
+                          "permitted to actively scan this target.", "red"))
+            raise SystemExit(2)
+
+        user = User.query.filter_by(username="cli").first()
+        if not user:
+            user = User(username="cli", email="cli@vulntriage.local", role="analyst")
+            user.set_password(_uuid.uuid4().hex)
+            db.session.add(user); db.session.commit()
+
+        click.echo(_c(f"VulnTriage auto scan", "cyan", bold=True)
+                   + f"  target={target}  scanners={','.join(scanner_list)}")
+        try:
+            res = AutoScanOrchestrator().run(
+                target=target, scanners=scanner_list, user_id=user.id,
+                authorise=True, search_exploits=search_exploits,
+                run_poc=run_poc, poc_scope=poc_scope,
+                progress=lambda m: click.echo("  " + _c("›", "cyan") + " " + m),
+            )
+        except AutoScanError as exc:
+            click.echo(_c(f"Auto scan failed: {exc}", "red")); raise SystemExit(1)
+
+        for name, info_ in res["scanners"].items():
+            colour = "green" if info_["status"] == "ok" else "yellow"
+            detail = info_.get("findings", info_.get("reason", ""))
+            click.echo(f"  {name:8s}: " + _c(f"{info_['status']} ({detail})", colour))
+
+        rpt = Report.query.get(res["report_id"]) if res.get("report_id") else None
+        if rpt:
+            _print_summary(rpt, user, top)
+            pdf_path = rpt.file_path
+            if output and pdf_path and os.path.exists(pdf_path):
+                import shutil
+                shutil.copyfile(pdf_path, output); pdf_path = os.path.abspath(output)
+            click.echo()
+            click.echo(_c("✓ PDF report:", "green", bold=True) + " " + (pdf_path or "(generation failed)"))
+        else:
+            click.echo(_c("Report generation failed — see findings in the DB.", "yellow"))
+
+
+@cli.command()
 @click.option("--db", "db_url", help="Database URL (default: ./vulntriage.db SQLite).")
 def info(db_url):
     """Show the active database and ML model metadata."""

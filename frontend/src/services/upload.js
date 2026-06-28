@@ -20,3 +20,13 @@ export const runPipeline  = (id, opts = {}) =>
     search_exploits: opts.searchExploits ?? false,
   })
 export const getMLInfo    = ()         => api.get('/pipeline/ml/info')
+export const getScanners  = ()         => api.get('/pipeline/scanners')
+export const runAutoScan  = (opts)     =>
+  api.post('/pipeline/autoscan', {
+    target: opts.target,
+    scanners: opts.scanners,
+    authorise: opts.authorise,
+    search_exploits: opts.searchExploits ?? false,
+    run_poc: opts.runPoc ?? false,
+    poc_scope: opts.pocScope || null,
+  }, { timeout: 0 })   // scans can run for minutes — disable the client timeout
