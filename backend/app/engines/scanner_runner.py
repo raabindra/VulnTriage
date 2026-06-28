@@ -131,12 +131,27 @@ def run_nessus(target: str, out_dir: str) -> str:
     headers = _nessus_headers(ak, sk)
     deadline = time.time() + NESSUS_TIMEOUT
 
+    # Nessus scans a host/IP, not a URL — extract the hostname from a URL target.
+    from urllib.parse import urlparse
+    host = urlparse(target).hostname or target
+
     try:
         uuid = _nessus_template_uuid(base, headers)
-        # Create + launch scan
+        # Create scan. Nessus *Essentials* (and some Professional builds) block
+        # scan creation via the REST API — the server resets the connection on
+        # POST /scans even though auth/GETs work. Detect that and explain.
         payload = {"uuid": uuid, "settings": {
-            "name": f"VulnTriage auto scan {target}", "enabled": True, "text_targets": target}}
-        r = requests.post(f"{base}/scans", json=payload, headers=headers, verify=False, timeout=30)
+            "name": f"VulnTriage auto scan {host}", "enabled": True, "text_targets": host}}
+        try:
+            r = requests.post(f"{base}/scans", json=payload, headers=headers,
+                              verify=False, timeout=30)
+        except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError):
+            raise ScannerError(
+                "Nessus refused scan creation via the API (connection reset on "
+                "POST /scans). This is the Nessus Essentials/Professional API "
+                "restriction — automated scan creation needs Nessus Manager or "
+                "Tenable.io. Workaround: run the scan in the Nessus UI, export the "
+                ".nessus file, and upload it to VulnTriage normally.")
         r.raise_for_status()
         scan_id = r.json()["scan"]["id"]
         requests.post(f"{base}/scans/{scan_id}/launch", headers=headers, verify=False, timeout=30).raise_for_status()
