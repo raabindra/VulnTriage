@@ -28,10 +28,21 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from sqlalchemy import func
+from xml.sax.saxutils import escape as _xml_escape
 
 from app import db
 from app.models.normalized_finding import NormalizedFinding
 from app.models.report import Report
+
+
+def _esc(text) -> str:
+    """Escape text for ReportLab Paragraph mini-markup.
+
+    Finding descriptions and especially PoC evidence/payloads contain attack
+    strings like '<script>...' — unescaped '<' breaks ReportLab's XML-ish parser
+    ('unclosed tags'). Apply to any scanner/PoC-derived text placed in a Paragraph
+    (slice BEFORE escaping so entities like '&lt;' aren't cut in half)."""
+    return _xml_escape(str(text or ""))
 
 # ── Constants ──────────────────────────────────────────────────────────────
 
@@ -488,7 +499,7 @@ class ReportGenerator:
             rationale = cs.factor_breakdown.get("rationale")
         if rationale:
             why_t = Table(
-                [[Paragraph(f"<b>Why this classification:</b> {rationale}", s["small"])]],
+                [[Paragraph(f"<b>Why this classification:</b> {_esc(rationale)}", s["small"])]],
                 colWidths=[170 * mm],
             )
             why_t.setStyle(TableStyle([
@@ -504,7 +515,7 @@ class ReportGenerator:
         if f.description:
             desc = (f.description[:550] + "…") if len(f.description) > 550 else f.description
             desc_t = Table(
-                [[Paragraph(f"<b>Description:</b> {desc}", s["small"])]],
+                [[Paragraph(f"<b>Description:</b> {_esc(desc)}", s["small"])]],
                 colWidths=[170 * mm],
             )
             desc_t.setStyle(TableStyle([
@@ -520,7 +531,7 @@ class ReportGenerator:
         if f.solution:
             sol = (f.solution[:350] + "…") if len(f.solution) > 350 else f.solution
             sol_t = Table(
-                [[Paragraph(f"<b>Recommendation:</b> {sol}", s["small"])]],
+                [[Paragraph(f"<b>Recommendation:</b> {_esc(sol)}", s["small"])]],
                 colWidths=[170 * mm],
             )
             sol_t.setStyle(TableStyle([
@@ -753,10 +764,10 @@ class ReportGenerator:
                     evidence_text += f"Error: {v.error_message[:80]}"
 
                 rows.append([
-                    Paragraph(title_short if i == 0 else "", s["small"]),
-                    Paragraph(v.validation_type or "—", s["small"]),
+                    Paragraph(_esc(title_short) if i == 0 else "", s["small"]),
+                    Paragraph(_esc(v.validation_type) or "—", s["small"]),
                     result_text,
-                    Paragraph(evidence_text[:150] or "—", s["small"]),
+                    Paragraph(_esc(evidence_text[:150]) or "—", s["small"]),
                 ])
 
         t = Table(rows, colWidths=[48*mm, 28*mm, 28*mm, 66*mm], repeatRows=1)
