@@ -535,9 +535,18 @@ class PocValidator:
 
     @staticmethod
     def _inject(url: str, param: str, value: str) -> str:
-        """Append or replace a parameter value in the URL."""
-        sep = "&" if "?" in url else "?"
-        return f"{url}{sep}{param}={requests.utils.quote(value, safe='')}"
+        """Set `param` to `value` in the URL's query string.
+
+        Must REPLACE an existing value, not append — scanner-derived finding URLs
+        usually already contain the parameter (with the scanner's own attack
+        payload). Appending `&param=...` creates a duplicate and most servers use
+        the *first* occurrence, so the PoC's payload would be silently ignored.
+        """
+        parts = urlparse(url)
+        qs = parse_qs(parts.query, keep_blank_values=True)
+        qs[param] = [value]   # replace any existing value(s)
+        new_query = urlencode(qs, doseq=True)
+        return urlunparse(parts._replace(query=new_query))
 
     @staticmethod
     def _strip_query(url: str) -> str:
