@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
-import { BoltIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
-import { getScanners, runAutoScan } from '../services/upload'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { BoltIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline'
+import { getScanners, startAutoScan, getAutoScanStatus } from '../services/upload'
+import { downloadReport } from '../services/reports'
 import { Spinner } from '../components/common/Loading'
 
 const SCANNER_META = {
@@ -21,9 +23,12 @@ export default function AutoScan() {
   const [running, setRunning] = useState(false)
   const [error, setError]     = useState('')
   const [result, setResult]   = useState(null)
+  const [progress, setProgress] = useState({ steps: [], expected: 1 })
+  const pollRef = useRef(null)
 
   useEffect(() => {
     getScanners().then(({ data }) => setAvail(data)).catch(() => {})
+    return () => clearInterval(pollRef.current)
   }, [])
 
   const chosen = Object.keys(picked).filter((s) => picked[s])
@@ -31,18 +36,49 @@ export default function AutoScan() {
 
   async function start() {
     setError(''); setResult(null); setRunning(true)
+    setProgress({ steps: [], expected: 1 })
     try {
-      const { data } = await runAutoScan({
+      const { data } = await startAutoScan({
         target: target.trim(), scanners: chosen, authorise,
         searchExploits, runPoc, pocScope,
       })
-      setResult(data.autoscan_results)
+      poll(data.job_id)
     } catch (e) {
-      setError(e.response?.data?.error || 'Auto scan failed')
-    } finally {
+      setError(e.response?.data?.error || 'Auto scan failed to start')
       setRunning(false)
     }
   }
+
+  function poll(jobId) {
+    clearInterval(pollRef.current)
+    pollRef.current = setInterval(async () => {
+      try {
+        const { data } = await getAutoScanStatus(jobId)
+        setProgress({ steps: data.steps || [], expected: data.expected_steps || 1 })
+        if (data.status === 'done') {
+          clearInterval(pollRef.current)
+          setResult(data.result); setRunning(false)
+        } else if (data.status === 'error') {
+          clearInterval(pollRef.current)
+          setError(data.error || 'Auto scan failed'); setRunning(false)
+        }
+      } catch {
+        clearInterval(pollRef.current)
+        setError('Lost connection to the scan job'); setRunning(false)
+      }
+    }, 2000)
+  }
+
+  async function saveReport(reportId) {
+    const { data } = await downloadReport(reportId)
+    const url = URL.createObjectURL(data)
+    const a = document.createElement('a')
+    a.href = url; a.download = `autoscan_report_${reportId}.pdf`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const pct = Math.min(95, Math.round((progress.steps.length / progress.expected) * 100))
+  const currentStep = progress.steps[progress.steps.length - 1] || 'Starting…'
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -139,9 +175,37 @@ export default function AutoScan() {
 
         <button onClick={start} disabled={!canRun}
           className="btn-primary w-full justify-center disabled:opacity-50">
-          {running ? <><Spinner size="sm" /> Scanning… (this can take several minutes)</> : 'Start Auto Scan'}
+          {running ? <><Spinner size="sm" /> Scanning…</> : 'Start Auto Scan'}
         </button>
       </div>
+
+      {/* Live progress */}
+      {running && (
+        <div className="card p-5 space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium text-gray-700 flex items-center gap-2">
+              <Spinner size="sm" /> {currentStep}
+            </span>
+            <span className="text-gray-400">{pct}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+            <div className="bg-primary-600 h-2.5 rounded-full transition-all duration-500"
+                 style={{ width: `${pct}%` }} />
+          </div>
+          <p className="text-xs text-gray-400">
+            Active scanning can take several minutes (ZAP spider + active scan). You can leave this page open.
+          </p>
+          {progress.steps.length > 1 && (
+            <ul className="text-xs text-gray-500 space-y-0.5 max-h-40 overflow-y-auto border-t border-gray-100 pt-2">
+              {progress.steps.slice(0, -1).map((s, i) => (
+                <li key={i} className="flex items-center gap-1.5">
+                  <CheckCircleIcon className="h-3.5 w-3.5 text-green-400 shrink-0" /> {s}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="card p-3 bg-red-50 border-red-200 text-red-700 text-sm flex items-center gap-2">
@@ -170,6 +234,16 @@ export default function AutoScan() {
             {result.exploit_search?.available ? `, ${result.exploit_search.total_exploits} exploit(s) found` : ''}
             {result.poc_validated != null ? `, ${result.poc_validated} PoC checks` : ''}
             {result.report_id ? `, report #${result.report_id} generated` : ''}.
+          </div>
+          {/* Where to see the results */}
+          <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+            <Link to="/findings" className="btn-primary text-xs">View Findings</Link>
+            <Link to="/dashboard" className="btn-secondary text-xs">Dashboard</Link>
+            {result.report_id && (
+              <button onClick={() => saveReport(result.report_id)} className="btn-secondary text-xs">
+                <DocumentArrowDownIcon className="h-4 w-4" /> Download Report
+              </button>
+            )}
           </div>
         </div>
       )}

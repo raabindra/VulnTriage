@@ -21,7 +21,7 @@ export const runPipeline  = (id, opts = {}) =>
   })
 export const getMLInfo    = ()         => api.get('/pipeline/ml/info')
 export const getScanners  = ()         => api.get('/pipeline/scanners')
-export const runAutoScan  = (opts)     =>
+export const startAutoScan = (opts)    =>
   api.post('/pipeline/autoscan', {
     target: opts.target,
     scanners: opts.scanners,
@@ -29,4 +29,5 @@ export const runAutoScan  = (opts)     =>
     search_exploits: opts.searchExploits ?? false,
     run_poc: opts.runPoc ?? false,
     poc_scope: opts.pocScope || null,
-  }, { timeout: 0 })   // scans can run for minutes — disable the client timeout
+  })   // returns { job_id } immediately; poll status below
+export const getAutoScanStatus = (jobId) => api.get(`/pipeline/autoscan/status/${jobId}`)

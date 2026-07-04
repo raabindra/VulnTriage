@@ -139,23 +139,54 @@ def scanners_status():
 @pipeline_bp.post("/autoscan")
 @jwt_required()
 def auto_scan_route():
-    """Optional orchestration: run scanners against a target, then triage."""
+    """Start an Auto Scan in the background; returns a job_id to poll."""
+    import threading
+    from flask import current_app
+    from app.engines.auto_scan import AutoScanOrchestrator, AutoScanError
+    from app.engines.autoscan_jobs import create_job, add_step, finish_job
+
     user_id = int(get_jwt_identity())
     body = request.json or {}
     target = (body.get("target") or "").strip()
     scanners = body.get("scanners") or []
+    search_exploits = bool(body.get("search_exploits"))
+    run_poc = bool(body.get("run_poc"))
+    poc_scope = body.get("poc_scope")
+
     if not target:
         return jsonify({"error": "target is required"}), 400
     if not body.get("authorise"):
         return jsonify({"error": "authorisation required: confirm you may actively scan this target"}), 400
 
-    from app.engines.auto_scan import AutoScanOrchestrator, AutoScanError
-    try:
-        results = AutoScanOrchestrator().run(
-            target=target, scanners=scanners, user_id=user_id, authorise=True,
-            search_exploits=bool(body.get("search_exploits")),
-            run_poc=bool(body.get("run_poc")), poc_scope=body.get("poc_scope"),
-        )
-    except AutoScanError as exc:
-        return jsonify({"error": str(exc)}), 400
-    return jsonify({"autoscan_results": results}), 200
+    job_id = create_job(target, scanners, search_exploits, run_poc)
+    app_obj = current_app._get_current_object()
+
+    def _worker():
+        # Own app context + DB session for this thread.
+        with app_obj.app_context():
+            try:
+                results = AutoScanOrchestrator().run(
+                    target=target, scanners=scanners, user_id=user_id, authorise=True,
+                    search_exploits=search_exploits, run_poc=run_poc, poc_scope=poc_scope,
+                    progress=lambda m: add_step(job_id, m),
+                )
+                finish_job(job_id, result=results)
+            except AutoScanError as exc:
+                finish_job(job_id, error=str(exc))
+            except Exception as exc:  # noqa: BLE001 — surface unexpected errors to the UI
+                finish_job(job_id, error=f"unexpected error: {exc}")
+            finally:
+                db.session.remove()
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return jsonify({"job_id": job_id}), 202
+
+
+@pipeline_bp.get("/autoscan/status/<job_id>")
+@jwt_required()
+def auto_scan_status(job_id: str):
+    from app.engines.autoscan_jobs import get_job
+    job = get_job(job_id)
+    if not job:
+        return jsonify({"error": "unknown job"}), 404
+    return jsonify(job), 200
