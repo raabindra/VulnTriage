@@ -6,9 +6,9 @@ import {
 } from 'recharts'
 import {
   BugAntIcon, ShieldCheckIcon, ExclamationTriangleIcon,
-  ArrowUpTrayIcon, ChartBarIcon,
+  ArrowUpTrayIcon, ChartBarIcon, TrashIcon,
 } from '@heroicons/react/24/outline'
-import { getDashboardSummary, getTopFindings } from '../services/dashboard'
+import { getDashboardSummary, getTopFindings, clearScanData } from '../services/dashboard'
 import StatCard from '../components/common/StatCard'
 import { SeverityBadge, ClassificationBadge, CLASSIFICATION_LABELS } from '../components/common/Badge'
 import { PageLoader } from '../components/common/Loading'
@@ -28,15 +28,35 @@ export default function Dashboard() {
   const [summary, setSummary]   = useState(null)
   const [topFindings, setTopFindings] = useState([])
   const [loading, setLoading]   = useState(true)
+  const [clearing, setClearing] = useState(false)
 
-  useEffect(() => {
-    Promise.all([getDashboardSummary(), getTopFindings()])
+  function load() {
+    return Promise.all([getDashboardSummary(), getTopFindings()])
       .then(([s, t]) => {
         setSummary(s.data)
         setTopFindings(t.data.top_findings)
       })
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function handleClear() {
+    if (!confirm(
+      'Clear ALL scan data (uploads, findings, and reports) for a fresh session?\n\n' +
+      'This cannot be undone. Your account and the CWE reference data are kept.'
+    )) return
+    setClearing(true)
+    try {
+      const { data } = await clearScanData()
+      alert(`Cleared ${data.uploads_deleted} upload(s) and ${data.reports_deleted} report(s).`)
+      await load()
+    } catch {
+      alert('Failed to clear data.')
+    } finally {
+      setClearing(false)
+    }
+  }
 
   if (loading) return <PageLoader />
 
@@ -59,6 +79,20 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
+        <button
+          onClick={handleClear}
+          disabled={clearing || (summary?.total_findings ?? 0) === 0}
+          className="btn-secondary text-xs disabled:opacity-40"
+          title="Delete all uploads, findings and reports to start a fresh session"
+        >
+          <TrashIcon className="h-4 w-4" />
+          {clearing ? 'Clearing…' : 'Clear Data'}
+        </button>
+      </div>
+
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard

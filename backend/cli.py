@@ -401,6 +401,41 @@ def autoscan(target, scanners, authorise, search_exploits, run_poc, poc_scope, o
 
 @cli.command()
 @click.option("--db", "db_url", help="Database URL (default: ./vulntriage.db SQLite).")
+@click.confirmation_option(prompt="Delete ALL CLI scan data (uploads, findings, reports)?")
+def reset(db_url):
+    """Clear all scan data created by the CLI, for a fresh session/target."""
+    import os
+    app = make_app(db_url)
+    with app.app_context():
+        import app.models  # noqa: F401
+        from app import db
+        from app.models.user import User
+        from app.models.scanner_upload import ScannerUpload
+        from app.models.report import Report
+        db.create_all()
+        user = User.query.filter_by(username="cli").first()
+        if not user:
+            click.echo("No CLI scan data to clear.")
+            return
+        uploads = ScannerUpload.query.filter_by(user_id=user.id).all()
+        reports = Report.query.filter_by(user_id=user.id).all()
+        for r in reports + uploads:
+            if r.file_path and os.path.exists(r.file_path):
+                try:
+                    os.remove(r.file_path)
+                except OSError:
+                    pass
+        nu, nr = len(uploads), len(reports)
+        for r in reports:
+            db.session.delete(r)
+        for u in uploads:
+            db.session.delete(u)
+        db.session.commit()
+        click.echo(_c(f"Cleared {nu} upload(s) and {nr} report(s).", "green"))
+
+
+@cli.command()
+@click.option("--db", "db_url", help="Database URL (default: ./vulntriage.db SQLite).")
 def info(db_url):
     """Show the active database and ML model metadata."""
     app = make_app(db_url)

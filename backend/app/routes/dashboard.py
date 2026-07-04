@@ -89,3 +89,46 @@ def top_findings():
     )
 
     return jsonify({"top_findings": [f.to_dict() for f in top]}), 200
+
+
+@dashboard_bp.delete("/data")
+@jwt_required()
+def clear_data():
+    """Delete all of the current user's scan data — uploads (which cascade to
+    vulnerabilities, findings, ML/confidence/PoC records) and reports, plus their
+    files. Keeps the user account and the shared CWE reference table. Used to
+    start a clean session against a different target."""
+    import os
+    from app.models.report import Report
+
+    user_id = int(get_jwt_identity())
+
+    uploads = ScannerUpload.query.filter_by(user_id=user_id).all()
+    reports = Report.query.filter_by(user_id=user_id).all()
+
+    # Remove files from disk first (best-effort), then the DB rows.
+    for r in reports:
+        if r.file_path and os.path.exists(r.file_path):
+            try:
+                os.remove(r.file_path)
+            except OSError:
+                pass
+    for u in uploads:
+        if u.file_path and os.path.exists(u.file_path):
+            try:
+                os.remove(u.file_path)
+            except OSError:
+                pass
+
+    n_uploads, n_reports = len(uploads), len(reports)
+    for r in reports:
+        db.session.delete(r)
+    for u in uploads:                    # cascades to vulns → findings → derived
+        db.session.delete(u)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Scan data cleared",
+        "uploads_deleted": n_uploads,
+        "reports_deleted": n_reports,
+    }), 200
