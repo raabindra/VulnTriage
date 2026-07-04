@@ -21,6 +21,7 @@ read (ZAP XML, Nuclei JSONL), or raises ScannerError.
 
 import os
 import shutil
+import socket
 import subprocess
 
 # Tool locations (allow override via env for non-standard installs).
@@ -79,21 +80,33 @@ def run_nuclei(target: str, out_dir: str) -> str:
 
 
 # ───────────────────────── OWASP ZAP ─────────────────────────
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 def run_zap(target: str, out_dir: str) -> str:
     if not _zap_ok():
         raise ScannerError("zaproxy/zap.sh not found")
     out = os.path.join(out_dir, "zap.xml")
-    # Headless quick scan: spider + passive + active, XML report (parser reads XML).
-    cmd = [ZAP_BIN, "-cmd", "-quickurl", target, "-quickout", out, "-quickprogress"]
+    # Isolate each run: a private ZAP home dir + a free proxy port. This avoids
+    # the common failure where a stale/concurrent ZAP holds the default port 8080
+    # or the ~/.ZAP session lock, which makes -quickurl silently produce no report.
+    home = os.path.join(out_dir, "zaphome")
+    os.makedirs(home, exist_ok=True)
+    cmd = [ZAP_BIN, "-cmd", "-dir", home, "-port", str(_free_port()),
+           "-quickurl", target, "-quickout", out, "-quickprogress"]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=ZAP_TIMEOUT)
     except subprocess.TimeoutExpired:
-        raise ScannerError(f"ZAP timed out after {ZAP_TIMEOUT}s")
+        raise ScannerError(f"ZAP timed out after {ZAP_TIMEOUT}s (raise ZAP_TIMEOUT for large targets)")
     except OSError as e:
         raise ScannerError(f"ZAP failed to start: {e}")
     if not os.path.exists(out):
-        raise ScannerError(f"ZAP produced no report (exit {proc.returncode}): "
-                           f"{(proc.stderr or proc.stdout or '')[:300]}")
+        msg = (proc.stderr or proc.stdout or "").strip().splitlines()
+        tail = " ".join(msg[-3:])[:300] if msg else "no output"
+        raise ScannerError(f"ZAP produced no report (exit {proc.returncode}): {tail}")
     return out
 
 

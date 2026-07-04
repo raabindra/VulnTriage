@@ -80,7 +80,11 @@ class AutoScanOrchestrator:
                 emit(f"{name}: {upload.vulnerability_count} findings ingested")
 
         if not upload_ids:
-            raise AutoScanError("no scanner produced ingestable results")
+            detail = "; ".join(
+                f"{n}: {i.get('status')}" + (f" ({i['reason']})" if i.get("reason") else "")
+                for n, i in results["scanners"].items()
+            )
+            raise AutoScanError(f"No scanner produced ingestable results — {detail}")
         results["upload_ids"] = upload_ids
 
         # ── Unified triage across all scanners' findings ──────────────────────
