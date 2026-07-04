@@ -35,6 +35,18 @@ from app.models.normalized_finding import NormalizedFinding
 from app.models.report import Report
 
 
+# Tester-friendly display labels for classifications (internal values unchanged).
+CLASSIFICATION_LABELS = {
+    "Confirmed": "Vulnerability Confirmed",
+    "Needs Manual Verification": "Needs Manual Verification",
+    "Not Confirmed": "Vulnerability Not Confirmed",
+}
+
+
+def _clabel(classification) -> str:
+    return CLASSIFICATION_LABELS.get(classification, classification or "Unclassified")
+
+
 def _esc(text) -> str:
     """Escape text for ReportLab Paragraph mini-markup.
 
@@ -474,7 +486,7 @@ class ReportGenerator:
              "Confidence",     f"{cs.score:.0f}/100" if cs else "—"],
             ["URL",            url_str,
              "ML Priority",    ml.predicted_priority if ml else "—"],
-            ["Classification", f.classification or "Unclassified",
+            ["Classification", _clabel(f.classification),
              "Scanners",       scanner_str],
         ], colWidths=[25 * mm, 57 * mm, 25 * mm, 63 * mm])
         meta.setStyle(TableStyle([
@@ -575,7 +587,7 @@ class ReportGenerator:
                 f.cve_id or "—",
                 f"{f.cvss_score:.1f}" if f.cvss_score else "—",
                 f"{cs.score:.0f}" if cs else "—",
-                f.classification or "—",
+                _clabel(f.classification) if f.classification else "—",
                 ml.predicted_priority if ml else "—",
             ])
 

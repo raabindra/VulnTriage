@@ -16,6 +16,15 @@ const CLASSIFICATION_STYLES = {
   'Unclassified':            'bg-gray-100 text-gray-500',
 }
 
+// Tester-friendly display labels. The internal/stored values stay unchanged
+// (used for DB, report counts, thresholds); only the shown text differs.
+export const CLASSIFICATION_LABELS = {
+  'Confirmed':                'Vulnerability Confirmed',
+  'Needs Manual Verification':'Needs Manual Verification',
+  'Not Confirmed':            'Vulnerability Not Confirmed',
+  'Unclassified':             'Unclassified',
+}
+
 const PRIORITY_STYLES = {
   Critical: 'bg-red-100 text-red-800',
   High:     'bg-orange-100 text-orange-800',
@@ -39,10 +48,10 @@ export function SeverityBadge({ severity }) {
 }
 
 export function ClassificationBadge({ classification }) {
-  const label = classification ?? 'Unclassified'
+  const key = classification ?? 'Unclassified'
   return (
-    <span className={clsx('badge', CLASSIFICATION_STYLES[label] ?? CLASSIFICATION_STYLES.Unclassified)}>
-      {label}
+    <span className={clsx('badge', CLASSIFICATION_STYLES[key] ?? CLASSIFICATION_STYLES.Unclassified)}>
+      {CLASSIFICATION_LABELS[key] ?? key}
     </span>
   )
 }

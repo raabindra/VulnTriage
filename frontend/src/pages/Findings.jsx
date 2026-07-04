@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline'
 import { listFindings } from '../services/vulnerabilities'
-import { SeverityBadge, ClassificationBadge, PriorityBadge } from '../components/common/Badge'
+import { SeverityBadge, ClassificationBadge, PriorityBadge, CLASSIFICATION_LABELS } from '../components/common/Badge'
 import { PageLoader } from '../components/common/Loading'
 import EmptyState from '../components/common/EmptyState'
 
@@ -70,7 +70,7 @@ export default function Findings() {
           className="input w-auto text-sm"
         >
           <option value="">All Classifications</option>
-          {CLASSIFICATIONS.map((c) => <option key={c}>{c}</option>)}
+          {CLASSIFICATIONS.map((c) => <option key={c} value={c}>{CLASSIFICATION_LABELS[c] ?? c}</option>)}
         </select>
 
         <span className="ml-auto text-sm text-gray-500">

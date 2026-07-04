@@ -304,19 +304,25 @@ def _print_summary(rpt, user, top: int) -> None:
     if not rows:
         return
 
+    _CLS_LABEL = {
+        "Confirmed": "Vulnerability Confirmed",
+        "Needs Manual Verification": "Needs Manual Verification",
+        "Not Confirmed": "Vulnerability Not Confirmed",
+    }
     click.echo()
     click.echo(_c(f"  Top {len(rows)} findings", "cyan"))
-    click.echo("  " + _c(f"{'SEVERITY':<14} {'CVSS':>4}  {'CLASSIFICATION':<26} TITLE", "bright_black"))
+    click.echo("  " + _c(f"{'SEVERITY':<14} {'CVSS':>4}  {'CLASSIFICATION':<28} TITLE", "bright_black"))
     for f in rows:
         sev = f.severity or "—"
         cls = f.classification or "—"
+        label = _CLS_LABEL.get(cls, cls)
         cvss = f"{f.cvss_score:.1f}" if f.cvss_score is not None else " — "
         title = (f.title or "")[:50]
         click.echo(
             "  "
             + _c(f"{sev:<14}", _SEV_COLOR.get(sev, "white")) + " "
             + f"{cvss:>4}  "
-            + _c(f"{cls:<26}", _CLS_COLOR.get(cls, "white")) + " "
+            + _c(f"{label:<28}", _CLS_COLOR.get(cls, "white")) + " "
             + title
         )
 

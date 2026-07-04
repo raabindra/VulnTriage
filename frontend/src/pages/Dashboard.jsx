@@ -10,7 +10,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { getDashboardSummary, getTopFindings } from '../services/dashboard'
 import StatCard from '../components/common/StatCard'
-import { SeverityBadge, ClassificationBadge } from '../components/common/Badge'
+import { SeverityBadge, ClassificationBadge, CLASSIFICATION_LABELS } from '../components/common/Badge'
 import { PageLoader } from '../components/common/Loading'
 import EmptyState from '../components/common/EmptyState'
 
@@ -18,9 +18,10 @@ const SEVERITY_COLORS = {
   Critical: '#dc2626', High: '#ea580c', Medium: '#d97706',
   Low: '#16a34a', Informational: '#6b7280', Unknown: '#9ca3af',
 }
+// Keyed by the display labels (classData names are mapped through CLASSIFICATION_LABELS).
 const CLASS_COLORS = {
-  Confirmed: '#16a34a', 'Needs Manual Verification': '#d97706',
-  'Not Confirmed': '#dc2626', Unclassified: '#9ca3af',
+  'Vulnerability Confirmed': '#16a34a', 'Needs Manual Verification': '#d97706',
+  'Vulnerability Not Confirmed': '#dc2626', Unclassified: '#9ca3af',
 }
 
 export default function Dashboard() {
@@ -44,7 +45,8 @@ export default function Dashboard() {
     : []
 
   const classData = summary
-    ? Object.entries(summary.classification_breakdown).map(([name, value]) => ({ name, value }))
+    ? Object.entries(summary.classification_breakdown)
+        .map(([name, value]) => ({ name: CLASSIFICATION_LABELS[name] ?? name, value }))
     : []
 
   const scannerData = summary

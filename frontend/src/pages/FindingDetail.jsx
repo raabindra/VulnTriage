@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeftIcon, PencilIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { getFinding, updateClassification } from '../services/vulnerabilities'
-import { SeverityBadge, ClassificationBadge, PriorityBadge } from '../components/common/Badge'
+import { SeverityBadge, ClassificationBadge, PriorityBadge, CLASSIFICATION_LABELS } from '../components/common/Badge'
 import { PageLoader } from '../components/common/Loading'
 
 const CLASSIFICATIONS = ['Confirmed', 'Needs Manual Verification', 'Not Confirmed']
@@ -90,7 +90,7 @@ export default function FindingDetail() {
         {editing ? (
           <div className="flex items-center gap-3">
             <select value={newClass} onChange={(e) => setNewClass(e.target.value)} className="input w-auto text-sm">
-              {CLASSIFICATIONS.map((c) => <option key={c}>{c}</option>)}
+              {CLASSIFICATIONS.map((c) => <option key={c} value={c}>{CLASSIFICATION_LABELS[c] ?? c}</option>)}
             </select>
             <button onClick={saveClassification} disabled={saving} className="btn-primary text-xs">
               <CheckIcon className="h-4 w-4" />Save
