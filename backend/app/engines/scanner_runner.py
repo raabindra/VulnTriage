@@ -88,28 +88,73 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+# Per-phase caps (minutes) for the ZAP automation plan; override via env.
+ZAP_SPIDER_MINS = int(os.environ.get("ZAP_SPIDER_MINS", "3"))
+ZAP_AJAX_MINS = int(os.environ.get("ZAP_AJAX_MINS", "5"))
+ZAP_ASCAN_MINS = int(os.environ.get("ZAP_ASCAN_MINS", "20"))
+
+
+def _zap_plan(target: str, out_dir: str) -> str:
+    """ZAP Automation Framework plan: traditional spider + AJAX spider (for SPAs)
+    + active scan, then a classic XML report the zap_parser reads."""
+    return f"""---
+env:
+  contexts:
+    - name: target
+      urls: ["{target}"]
+      includePaths: ["{target}.*"]
+  parameters:
+    failOnError: false
+    progressToStdout: true
+jobs:
+  - type: spider
+    parameters: {{ context: target, url: "{target}", maxDuration: {ZAP_SPIDER_MINS} }}
+  - type: spiderAjax
+    parameters: {{ context: target, url: "{target}", maxDuration: {ZAP_AJAX_MINS}, browserId: firefox-headless }}
+  - type: passiveScan-wait
+    parameters: {{ maxDuration: 2 }}
+  - type: activeScan
+    parameters: {{ context: target, maxScanDurationInMins: {ZAP_ASCAN_MINS} }}
+  - type: report
+    parameters:
+      template: traditional-xml
+      reportDir: "{out_dir}"
+      reportFile: zap
+      reportTitle: VulnTriage ZAP Scan
+"""
+
+
 def run_zap(target: str, out_dir: str) -> str:
     if not _zap_ok():
         raise ScannerError("zaproxy/zap.sh not found")
-    out = os.path.join(out_dir, "zap.xml")
-    # Isolate each run: a private ZAP home dir + a free proxy port. This avoids
-    # the common failure where a stale/concurrent ZAP holds the default port 8080
-    # or the ~/.ZAP session lock, which makes -quickurl silently produce no report.
+    # Isolate each run: a private ZAP home dir + a free proxy port so concurrent/
+    # stale ZAP instances can't collide on port 8080 or the ~/.ZAP session lock.
     home = os.path.join(out_dir, "zaphome")
     os.makedirs(home, exist_ok=True)
-    cmd = [ZAP_BIN, "-cmd", "-dir", home, "-port", str(_free_port()),
-           "-quickurl", target, "-quickout", out, "-quickprogress"]
+    plan = os.path.join(out_dir, "zap_plan.yaml")
+    with open(plan, "w") as f:
+        f.write(_zap_plan(target, out_dir))
+
+    cmd = [ZAP_BIN, "-cmd", "-dir", home, "-port", str(_free_port()), "-autorun", plan]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=ZAP_TIMEOUT)
     except subprocess.TimeoutExpired:
-        raise ScannerError(f"ZAP timed out after {ZAP_TIMEOUT}s (raise ZAP_TIMEOUT for large targets)")
+        raise ScannerError(f"ZAP timed out after {ZAP_TIMEOUT}s (raise ZAP_TIMEOUT or lower "
+                           f"ZAP_ASCAN_MINS for large targets)")
     except OSError as e:
         raise ScannerError(f"ZAP failed to start: {e}")
-    if not os.path.exists(out):
-        msg = (proc.stderr or proc.stdout or "").strip().splitlines()
-        tail = " ".join(msg[-3:])[:300] if msg else "no output"
-        raise ScannerError(f"ZAP produced no report (exit {proc.returncode}): {tail}")
-    return out
+
+    # The report job writes reportFile + the template's extension (.xml).
+    report = os.path.join(out_dir, "zap.xml")
+    if not os.path.exists(report):
+        found = [f for f in os.listdir(out_dir) if f.lower().endswith(".xml")]
+        if found:
+            report = os.path.join(out_dir, found[0])
+        else:
+            msg = (proc.stderr or proc.stdout or "").strip().splitlines()
+            tail = " ".join(msg[-4:])[:400] if msg else "no output"
+            raise ScannerError(f"ZAP produced no report (exit {proc.returncode}): {tail}")
+    return report
 
 
 _RUNNERS = {"nuclei": run_nuclei, "zap": run_zap}
