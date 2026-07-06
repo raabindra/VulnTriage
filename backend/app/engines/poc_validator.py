@@ -104,10 +104,24 @@ class PocValidator:
         # POC_SCOPE env var (comma-separated). When EMPTY, scope is unrestricted
         # (legacy behaviour); pentesters SHOULD set it to stay in-scope.
         raw = scope if scope is not None else os.environ.get("POC_SCOPE", "")
-        if isinstance(raw, str):
-            self.scope = [h.strip().lower() for h in raw.split(",") if h.strip()]
-        else:
-            self.scope = [str(h).strip().lower() for h in (raw or []) if str(h).strip()]
+        entries = raw.split(",") if isinstance(raw, str) else (raw or [])
+        # Normalise each entry to a bare host: findings are matched against a
+        # urlparse hostname (port-stripped), so a scope entry that keeps a port
+        # or scheme (e.g. "localhost:3000" or "http://localhost:3000") would
+        # never match and would silently skip every PoC. Strip both here.
+        self.scope = [h for h in (self._norm_host(e) for e in entries) if h]
+
+    @staticmethod
+    def _norm_host(entry) -> str:
+        e = str(entry).strip().lower()
+        if not e:
+            return ""
+        if "://" in e:
+            return (urlparse(e).hostname or "").strip()
+        e = e.split("/", 1)[0]          # drop any path
+        if e.count(":") == 1:           # drop :port (leave bare IPv6 alone)
+            e = e.split(":", 1)[0]
+        return e
 
     def _in_scope(self, url: str) -> bool:
         if not self.scope:

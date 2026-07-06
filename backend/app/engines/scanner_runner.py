@@ -35,6 +35,16 @@ NUCLEI_BIN = os.environ.get("NUCLEI_BIN") or shutil.which("nuclei") \
 ZAP_TIMEOUT = int(os.environ.get("ZAP_TIMEOUT", "2400"))
 NUCLEI_TIMEOUT = int(os.environ.get("NUCLEI_TIMEOUT", "1200"))
 
+# Cap the ZAP JVM heap so a big active scan can't balloon into swap and freeze
+# the whole VM. zap.sh treats -Xmx as a passthrough to the java launcher.
+ZAP_XMX = os.environ.get("ZAP_XMX", "2g")
+
+# Refuse to start a ZAP scan unless this much disk is free on the scan volume.
+# ZAP writes its scan session as an on-disk DB that grows through the scan; on a
+# near-full disk it fills to 0 bytes mid-scan and can take the host down. Fail
+# fast with a clear message instead. Override via env (bytes).
+ZAP_MIN_FREE_BYTES = int(os.environ.get("ZAP_MIN_FREE_BYTES", str(2 * 1024**3)))
+
 # Scanners Auto Scan can drive. (Nessus is supported via manual export+upload.)
 SUPPORTED_SCANNERS = ("zap", "nuclei")
 
@@ -88,10 +98,12 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-# Per-phase caps (minutes) for the ZAP automation plan; override via env.
-ZAP_SPIDER_MINS = int(os.environ.get("ZAP_SPIDER_MINS", "3"))
-ZAP_AJAX_MINS = int(os.environ.get("ZAP_AJAX_MINS", "5"))
-ZAP_ASCAN_MINS = int(os.environ.get("ZAP_ASCAN_MINS", "20"))
+# Per-phase caps (minutes) for the ZAP automation plan; override via env. Kept
+# modest so a large app (e.g. Juice Shop) completes and the report is written —
+# the active scan uses Low attack strength + a per-rule cap to stay bounded.
+ZAP_SPIDER_MINS = int(os.environ.get("ZAP_SPIDER_MINS", "2"))
+ZAP_AJAX_MINS = int(os.environ.get("ZAP_AJAX_MINS", "3"))
+ZAP_ASCAN_MINS = int(os.environ.get("ZAP_ASCAN_MINS", "8"))
 
 
 def _zap_plan(target: str, out_dir: str) -> str:
@@ -110,11 +122,21 @@ jobs:
   - type: spider
     parameters: {{ context: target, url: "{target}", maxDuration: {ZAP_SPIDER_MINS} }}
   - type: spiderAjax
-    parameters: {{ context: target, url: "{target}", maxDuration: {ZAP_AJAX_MINS}, browserId: firefox-headless }}
+    parameters: {{ context: target, url: "{target}", maxDuration: {ZAP_AJAX_MINS},
+                   browserId: firefox-headless, numberOfBrowsers: 1 }}
   - type: passiveScan-wait
     parameters: {{ maxDuration: 2 }}
   - type: activeScan
-    parameters: {{ context: target, maxScanDurationInMins: {ZAP_ASCAN_MINS} }}
+    parameters:
+      context: target
+      # Cap the WHOLE active scan and EACH rule — maxScanDurationInMins alone is a
+      # soft cap that overruns badly on big apps (many endpoints x rules), which
+      # blows the subprocess timeout and loses the report (report job runs last).
+      maxScanDurationInMins: {ZAP_ASCAN_MINS}
+      maxRuleDurationInMins: 1
+      policyDefinition:
+        defaultThreshold: Medium
+        defaultStrength: Low
   - type: report
     parameters:
       template: traditional-xml
@@ -127,6 +149,14 @@ jobs:
 def run_zap(target: str, out_dir: str) -> str:
     if not _zap_ok():
         raise ScannerError("zaproxy/zap.sh not found")
+    # Fail fast on a near-full disk: ZAP's on-disk scan session grows through the
+    # scan, and filling the volume mid-scan can freeze the whole VM.
+    free = shutil.disk_usage(out_dir).free
+    if free < ZAP_MIN_FREE_BYTES:
+        raise ScannerError(
+            f"insufficient disk to run ZAP safely: {free // 1024**2} MiB free, "
+            f"need {ZAP_MIN_FREE_BYTES // 1024**2} MiB "
+            f"(free space, e.g. clear ~/.ZAP/sessions, or lower ZAP_MIN_FREE_BYTES)")
     # Isolate each run: a private ZAP home dir + a free proxy port so concurrent/
     # stale ZAP instances can't collide on port 8080 or the ~/.ZAP session lock.
     home = os.path.join(out_dir, "zaphome")
@@ -135,12 +165,20 @@ def run_zap(target: str, out_dir: str) -> str:
     with open(plan, "w") as f:
         f.write(_zap_plan(target, out_dir))
 
-    cmd = [ZAP_BIN, "-cmd", "-dir", home, "-port", str(_free_port()), "-autorun", plan]
+    # -Xmx caps the JVM heap (bounds RAM); zap.sh passes it through to java.
+    cmd = [ZAP_BIN, f"-Xmx{ZAP_XMX}",
+           "-cmd", "-dir", home, "-port", str(_free_port()), "-autorun", plan]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=ZAP_TIMEOUT)
-    except subprocess.TimeoutExpired:
-        raise ScannerError(f"ZAP timed out after {ZAP_TIMEOUT}s (raise ZAP_TIMEOUT or lower "
-                           f"ZAP_ASCAN_MINS for large targets)")
+    except subprocess.TimeoutExpired as e:
+        # progressToStdout logs each job's start/finish, so the tail shows which
+        # phase was still running when the ceiling was hit.
+        out = (e.stdout or b"")
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", "replace")
+        phase = " | ".join(l for l in out.splitlines() if "Job " in l)[-300:]
+        raise ScannerError(f"ZAP timed out after {ZAP_TIMEOUT}s (lower ZAP_ASCAN_MINS). "
+                           f"Last phases: {phase or 'n/a'}")
     except OSError as e:
         raise ScannerError(f"ZAP failed to start: {e}")
 
