@@ -29,9 +29,11 @@ ZAP_BIN = os.environ.get("ZAP_BIN") or shutil.which("zaproxy") or shutil.which("
 NUCLEI_BIN = os.environ.get("NUCLEI_BIN") or shutil.which("nuclei") \
     or os.path.expanduser("~/go-workspace/bin/nuclei")
 
-# Default per-scanner wall-clock limits (seconds); override via env.
-ZAP_TIMEOUT = int(os.environ.get("ZAP_TIMEOUT", "900"))
-NUCLEI_TIMEOUT = int(os.environ.get("NUCLEI_TIMEOUT", "600"))
+# Default per-scanner wall-clock limits (seconds); override via env. Generous by
+# default — a full active scan of a large real app (e.g. Juice Shop) can take
+# 20-40 min. The timeout is a ceiling, so small targets still finish quickly.
+ZAP_TIMEOUT = int(os.environ.get("ZAP_TIMEOUT", "2400"))
+NUCLEI_TIMEOUT = int(os.environ.get("NUCLEI_TIMEOUT", "1200"))
 
 # Scanners Auto Scan can drive. (Nessus is supported via manual export+upload.)
 SUPPORTED_SCANNERS = ("zap", "nuclei")
