@@ -5,7 +5,7 @@ import { getFinding, updateClassification } from '../services/vulnerabilities'
 import { SeverityBadge, ClassificationBadge, PriorityBadge, CLASSIFICATION_LABELS } from '../components/common/Badge'
 import { PageLoader } from '../components/common/Loading'
 
-const CLASSIFICATIONS = ['Confirmed', 'Needs Manual Verification', 'Not Confirmed']
+const CLASSIFICATIONS = ['Confirmed', 'Needs Manual Verification', 'Not Confirmed', 'Informational']
 
 const FACTOR_LABELS = {
   scanner_agreement:    'Scanner Agreement',

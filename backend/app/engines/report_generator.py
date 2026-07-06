@@ -40,6 +40,7 @@ CLASSIFICATION_LABELS = {
     "Confirmed": "Vulnerability Confirmed",
     "Needs Manual Verification": "Needs Manual Verification",
     "Not Confirmed": "Vulnerability Not Confirmed",
+    "Informational": "Informational",
 }
 
 

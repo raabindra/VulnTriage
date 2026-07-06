@@ -7,7 +7,7 @@ import { PageLoader } from '../components/common/Loading'
 import EmptyState from '../components/common/EmptyState'
 
 const SEVERITIES       = ['Critical', 'High', 'Medium', 'Low', 'Informational']
-const CLASSIFICATIONS  = ['Confirmed', 'Needs Manual Verification', 'Not Confirmed']
+const CLASSIFICATIONS  = ['Confirmed', 'Needs Manual Verification', 'Not Confirmed', 'Informational']
 
 export default function Findings() {
   const [searchParams, setSearchParams] = useSearchParams()

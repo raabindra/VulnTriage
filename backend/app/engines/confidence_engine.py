@@ -108,6 +108,12 @@ class ConfidenceEngine:
             # all collapsing to a flat 75. Monotonic, so ordering is preserved.
             total = round(70.0 + (total / 100.0) * 30.0, 2)
             override_note = "PoC actively confirmed the vulnerability — classification forced to Confirmed (score scaled into the 70-100 band)."
+        elif (finding.severity or "").strip().lower() in ("informational", "info", "information"):
+            # Scanner-rated informational findings (tech/version detection, exposed
+            # metadata) are not vulnerabilities to confirm/deny — bucket them as
+            # "Informational" so testers aren't confused by a "Not Confirmed" verdict.
+            classification = "Informational"
+            override_note = None
         else:
             classification = self._classify(total)
             override_note = None

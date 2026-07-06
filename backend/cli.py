@@ -60,6 +60,7 @@ _CLS_COLOR = {
     "Confirmed": "green",
     "Needs Manual Verification": "yellow",
     "Not Confirmed": "bright_black",
+    "Informational": "blue",
 }
 
 
@@ -308,6 +309,7 @@ def _print_summary(rpt, user, top: int) -> None:
         "Confirmed": "Vulnerability Confirmed",
         "Needs Manual Verification": "Needs Manual Verification",
         "Not Confirmed": "Vulnerability Not Confirmed",
+        "Informational": "Informational",
     }
     click.echo()
     click.echo(_c(f"  Top {len(rows)} findings", "cyan"))

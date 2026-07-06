@@ -13,6 +13,7 @@ const CLASSIFICATION_STYLES = {
   'Confirmed':               'bg-green-100 text-green-800',
   'Needs Manual Verification':'bg-amber-100 text-amber-800',
   'Not Confirmed':           'bg-red-100 text-red-800',
+  'Informational':           'bg-blue-100 text-blue-700',
   'Unclassified':            'bg-gray-100 text-gray-500',
 }
 
@@ -22,6 +23,7 @@ export const CLASSIFICATION_LABELS = {
   'Confirmed':                'Vulnerability Confirmed',
   'Needs Manual Verification':'Needs Manual Verification',
   'Not Confirmed':            'Vulnerability Not Confirmed',
+  'Informational':            'Informational',
   'Unclassified':             'Unclassified',
 }
 

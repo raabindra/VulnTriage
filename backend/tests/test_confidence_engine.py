@@ -63,6 +63,13 @@ def test_poc_confirmed_overrides_to_confirmed():
     assert "PoC" in breakdown["rationale"]
 
 
+def test_informational_severity_is_classified_informational():
+    f = FindingStub("Wappalyzer Technology Detection", is_true_positive=False,
+                    severity="Informational", scanner_count=1, scanner_sources=["nuclei"])
+    _, classification, _ = ConfidenceEngine().compute_score(f)
+    assert classification == "Informational"
+
+
 def test_weak_poc_type_does_not_override_to_confirmed():
     # A generic payload_reflection 'confirmed' must NOT force Confirmed — it only
     # proves input is reflected, not that the reported vuln (e.g. buffer overflow)
