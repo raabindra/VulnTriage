@@ -102,8 +102,12 @@ class ConfidenceEngine:
         )
         if poc_confirmed:
             classification = "Confirmed"
-            total = max(total, 75.0)
-            override_note = "PoC actively confirmed the vulnerability — classification forced to Confirmed."
+            # Guarantee the Confirmed band (>=70) but keep score variation: map the
+            # finding's own evidence strength into 70-100 so confirmed findings are
+            # still ranked by corroboration (scanners, CVE, exploit, ...) instead of
+            # all collapsing to a flat 75. Monotonic, so ordering is preserved.
+            total = round(70.0 + (total / 100.0) * 30.0, 2)
+            override_note = "PoC actively confirmed the vulnerability — classification forced to Confirmed (score scaled into the 70-100 band)."
         else:
             classification = self._classify(total)
             override_note = None
