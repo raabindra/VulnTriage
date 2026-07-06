@@ -31,6 +31,9 @@ class _MLPred:
 @dataclass
 class _PoC:
     result: str  # "confirmed" | "not_confirmed" | "error"
+    # A strong, vuln-specific type by default so a "confirmed" benchmark PoC
+    # exercises the hard-override (see ConfidenceEngine.STRONG_POC_TYPES).
+    validation_type: str = "sqli_check"
 
 
 @dataclass
@@ -60,6 +63,7 @@ class FindingStub:
     exploit_available: bool = False
     _ml_priority: str | None = None
     _poc_results: list = field(default_factory=list)
+    _poc_type: str = "sqli_check"      # strong by default; set weak to test override
     _raw_exploit: str | None = None
 
     # --- duck-typed accessors the engine expects -------------------------
@@ -69,7 +73,7 @@ class FindingStub:
 
     @property
     def poc_validations(self):
-        return _PoCManager([_PoC(r) for r in self._poc_results])
+        return _PoCManager([_PoC(r, self._poc_type) for r in self._poc_results])
 
     @property
     def source_vulnerability(self):

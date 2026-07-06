@@ -63,6 +63,17 @@ def test_poc_confirmed_overrides_to_confirmed():
     assert "PoC" in breakdown["rationale"]
 
 
+def test_weak_poc_type_does_not_override_to_confirmed():
+    # A generic payload_reflection 'confirmed' must NOT force Confirmed — it only
+    # proves input is reflected, not that the reported vuln (e.g. buffer overflow)
+    # is real. It may still land in review, but never auto-Confirmed on its own.
+    f = FindingStub("Buffer Overflow", is_true_positive=False, severity="Medium",
+                    scanner_count=1, scanner_sources=["zap"],
+                    _poc_results=["confirmed"], _poc_type="payload_reflection")
+    _, classification, _ = ConfidenceEngine().compute_score(f)
+    assert classification != "Confirmed"
+
+
 def test_severity_consistency_neutral_without_cvss_vector():
     # No attack_vector => ML severity cannot corroborate => neutral (50), not a penalty.
     f = FindingStub(

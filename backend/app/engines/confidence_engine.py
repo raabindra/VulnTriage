@@ -46,6 +46,14 @@ from app.models.normalized_finding import NormalizedFinding
 from app.models.confidence_score import ConfidenceScore
 
 
+# Validation types strong/specific enough to hard-override to "Confirmed".
+# Excludes the generic payload_reflection / response_analysis checks, which
+# confirm on mere reflection or a Server header and would over-confirm.
+STRONG_POC_TYPES = {
+    "xss_check", "sqli_check", "open_redirect_check",
+    "lfi_check", "header_check", "cors_check",
+}
+
 # Ordinal ranking shared by ML priority and scanner severity, used to measure
 # agreement between the two (severity_consistency factor).
 _SEVERITY_ORDINAL = {
@@ -82,10 +90,15 @@ class ConfidenceEngine:
         total = sum((factors[k]["raw"] / 100) * self.weights[k] for k in self.weights)
         total = round(min(max(total, 0), 100), 2)
 
-        # PoC override: an actively-confirmed validation forces "Confirmed"
-        # regardless of the composite score (direct evidence trumps priors).
+        # PoC override: a confirmed *vulnerability-specific* validation forces
+        # "Confirmed". Only STRONG, type-matched checks qualify — the generic
+        # payload_reflection / response_analysis checks confirm on mere input
+        # reflection or a Server header, which does NOT prove the reported vuln
+        # (e.g. a spurious "Buffer Overflow" or informational tech-detection), so
+        # they must not hard-override. They still contribute via the poc factor.
         poc_confirmed = any(
-            v.result == "confirmed" for v in finding.poc_validations.all()
+            v.result == "confirmed" and v.validation_type in STRONG_POC_TYPES
+            for v in finding.poc_validations.all()
         )
         if poc_confirmed:
             classification = "Confirmed"
