@@ -1,4 +1,29 @@
+import html as _html
 import re
+
+
+_HTML_BLOCK_RE = re.compile(r"(?i)</(p|div|li|ul|ol|tr|h[1-6])\s*>|<br\s*/?>")
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def html_to_text(value, max_len: int = 10000) -> str | None:
+    """Convert HTML markup to readable plain text.
+
+    Scanner descriptions/solutions (notably ZAP's) arrive as HTML, which would
+    otherwise show raw <p>…</p> tags in the UI and the PDF report. Block-level
+    closing tags become newlines so paragraphs/list items stay separated, all
+    remaining tags are removed, and HTML entities are decoded. Returns None for
+    empty input.
+    """
+    if not value:
+        return None
+    s = _HTML_BLOCK_RE.sub("\n", str(value))
+    s = _HTML_TAG_RE.sub("", s)
+    s = _html.unescape(s)
+    s = re.sub(r"[ \t]+", " ", s)
+    s = re.sub(r"\n[ \t]*", "\n", s)
+    s = re.sub(r"\n{3,}", "\n\n", s).strip()
+    return s[:max_len] or None
 
 
 def allowed_file(filename: str, allowed_extensions: set) -> bool:

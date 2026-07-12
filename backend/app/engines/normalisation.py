@@ -19,6 +19,7 @@ from app.utils.helpers import (
     extract_cwe_id,
     extract_cve_id,
     sanitize_text,
+    html_to_text,
 )
 
 
@@ -71,7 +72,7 @@ class NormalisationEngine:
             scanner_count=1,
             scanner_sources=[vuln.scanner_type],
             title=sanitize_text(vuln.name, 500),
-            description=sanitize_text(vuln.description),
+            description=html_to_text(vuln.description),
             url=sanitize_text(vuln.url),
             parameter=sanitize_text(vuln.parameter, 255),
             method=vuln.method,
@@ -80,6 +81,6 @@ class NormalisationEngine:
             cwe_id=cwe_id,
             cvss_score=vuln.cvss_score,
             cvss_vector=vuln.cvss_vector,
-            solution=sanitize_text(vuln.solution),
+            solution=html_to_text(vuln.solution),
             reference=sanitize_text(vuln.reference),
         )

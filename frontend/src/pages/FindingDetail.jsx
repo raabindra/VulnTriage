@@ -200,11 +200,11 @@ export default function FindingDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-gray-700 mb-2">Description</h2>
-          <p className="text-sm text-gray-600 leading-relaxed">{finding.description || 'No description available.'}</p>
+          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{finding.description || 'No description available.'}</p>
         </div>
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-gray-700 mb-2">Recommended Solution</h2>
-          <p className="text-sm text-gray-600 leading-relaxed">{finding.solution || 'No solution provided.'}</p>
+          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{finding.solution || 'No solution provided.'}</p>
         </div>
       </div>
 
