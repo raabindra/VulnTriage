@@ -129,38 +129,26 @@ flowchart LR
 The heart of the system is the unified triage pipeline. The activity diagram below shows the flow from an ingested report to a finished PDF report, including the two conditional branches (optional exploit lookup and optional PoC validation) and the PoC-confirmation override.
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Parse
-    Parse: Parse scanner report → Vulnerability records
-    Parse --> Normalise
-    Normalise: Normalise (unify severity, CWE, fields)
-    Normalise --> Deduplicate
-    Deduplicate: De-duplicate (SHA-256 group hash; merge cross-scanner)
-    Deduplicate --> MapCWE
-    MapCWE: Map CWE (scanner value → keyword table)
-    MapCWE --> EnrichNVD
-    EnrichNVD: Enrich from NVD (CVSS vector + CWE back-fill)
-    EnrichNVD --> InferVector
-    InferVector: Infer CVSS vector from CWE (if none)
-    InferVector --> Predict
-    Predict: ML prioritisation (Random Forest → severity band)
-    Predict --> ExploitCheck
-    ExploitCheck: Exploit lookup?
-    ExploitCheck --> Score: no
-    ExploitCheck --> SearchSploit: yes
-    SearchSploit: searchsploit (Exploit-DB)
-    SearchSploit --> Score
-    Score: Confidence scoring (6 factors → 0–100)
-    Score --> PoCDecision
-    PoCDecision: Run PoC?
-    PoCDecision --> Report: no
-    PoCDecision --> RunPoC: yes
-    RunPoC: Non-destructive PoC checks
-    RunPoC --> Override
-    Override: PoC confirmed? force Confirmed
-    Override --> Report
-    Report: Generate PDF report
-    Report --> [*]
+flowchart TD
+    START([Start]) --> P["Parse scanner report into Vulnerability records"]
+    P --> N["Normalise: unify severity, CWE, fields"]
+    N --> D["De-duplicate: SHA-256 group hash, merge cross-scanner"]
+    D --> C["Map CWE: scanner value or keyword table"]
+    C --> E["Enrich from NVD: CVSS vector + CWE back-fill"]
+    E --> V["Infer CVSS vector from CWE if none"]
+    V --> ML["ML prioritisation: Random Forest severity band"]
+    ML --> EX{"Exploit lookup?"}
+    EX -->|yes| SS["searchsploit (Exploit-DB)"]
+    EX -->|no| SC["Confidence scoring: 6 factors, 0-100"]
+    SS --> SC
+    SC --> PD{"Run PoC?"}
+    PD -->|no| RPT["Generate PDF report"]
+    PD -->|yes| RP["Non-destructive PoC checks"]
+    RP --> OV{"PoC confirmed?"}
+    OV -->|yes| FC["Force classification = Confirmed"]
+    OV -->|no| RPT
+    FC --> RPT
+    RPT --> END([End])
 ```
 
 ### 4.2.4 Sequence Diagrams
