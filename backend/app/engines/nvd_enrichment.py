@@ -209,20 +209,26 @@ class NvdEnrichmentEngine:
             or {}
         )
 
-        score = cvss_v3.get("baseScore")
-        if score is not None and finding.cvss_score is None:
-            finding.cvss_score = float(score)
-            finding.severity = cvss_score_to_severity(finding.cvss_score)
-
-        finding.cvss_vector = cvss_v3.get("vectorString") or finding.cvss_vector
-        finding.attack_vector = cvss_v3.get("attackVector")
-        finding.attack_complexity = cvss_v3.get("attackComplexity")
-        finding.privileges_required = cvss_v3.get("privilegesRequired")
-        finding.user_interaction = cvss_v3.get("userInteraction")
-        finding.scope = cvss_v3.get("scope")
-        finding.confidentiality_impact = cvss_v3.get("confidentialityImpact")
-        finding.integrity_impact = cvss_v3.get("integrityImpact")
-        finding.availability_impact = cvss_v3.get("availabilityImpact")
+        # NVD's official CVSS v3 for this exact CVE is authoritative, so apply the
+        # score, severity, vector and all sub-metrics together as one consistent
+        # set — never leave a scanner's heuristic score paired with NVD's vector.
+        # Only touch these when NVD actually has a v3 vector; otherwise leave any
+        # scanner-provided CVSS data intact (don't null it out).
+        vector = cvss_v3.get("vectorString")
+        if vector:
+            finding.cvss_vector = vector
+            score = cvss_v3.get("baseScore")
+            if score is not None:
+                finding.cvss_score = float(score)
+                finding.severity = cvss_score_to_severity(finding.cvss_score)
+            finding.attack_vector = cvss_v3.get("attackVector")
+            finding.attack_complexity = cvss_v3.get("attackComplexity")
+            finding.privileges_required = cvss_v3.get("privilegesRequired")
+            finding.user_interaction = cvss_v3.get("userInteraction")
+            finding.scope = cvss_v3.get("scope")
+            finding.confidentiality_impact = cvss_v3.get("confidentialityImpact")
+            finding.integrity_impact = cvss_v3.get("integrityImpact")
+            finding.availability_impact = cvss_v3.get("availabilityImpact")
 
         # Backfill an authoritative CWE from NVD when the scanner gave none —
         # helps findings that carry a CVE but no weakness class (feeds the CWE

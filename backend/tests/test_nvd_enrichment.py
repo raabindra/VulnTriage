@@ -59,7 +59,22 @@ def test_apply_preserves_scanner_provided_cwe():
     assert f.cwe_id == "CWE-79"                 # scanner CWE not overwritten
 
 
-def test_apply_does_not_override_existing_cvss_score():
+def test_apply_uses_authoritative_nvd_cvss_consistently():
+    # NVD's official CVSS wins over a scanner's heuristic score, and score+vector
+    # stay consistent (no scanner score paired with an NVD vector).
     f = NormalizedFinding(group_hash="n3", title="x", cwe_id=None, cvss_score=5.0)
     NvdEnrichmentEngine._apply_cve_data(f, CVE_REC)
-    assert f.cvss_score == 5.0                  # existing score wins
+    assert f.cvss_score == 9.8
+    assert f.cvss_vector == CVE_REC["metrics"]["cvssMetricV31"][0]["cvssData"]["vectorString"]
+    assert f.attack_vector == "NETWORK"
+
+
+def test_apply_preserves_scanner_cvss_when_nvd_has_no_v3():
+    # A CVE with no v3 metrics must not null out scanner-provided CVSS fields.
+    rec = {"weaknesses": [], "vulnStatus": "Analyzed"}   # no "metrics"
+    f = NormalizedFinding(group_hash="n4", title="x", cvss_score=6.1,
+                          cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+                          attack_vector="NETWORK")
+    NvdEnrichmentEngine._apply_cve_data(f, rec)
+    assert f.cvss_score == 6.1
+    assert f.attack_vector == "NETWORK"          # not wiped to None
