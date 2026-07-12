@@ -1,7 +1,8 @@
 # Writeup Notes — Evaluation Framing
 
 Honest, defensible framings for the dissertation's evaluation chapter. Numbers
-below were measured live on 2026-07-10 (not just quoted from cached metadata).
+below were measured live between 2026-07-10 and 2026-07-12 (not just quoted from
+cached metadata).
 
 ## Confidence Engine — false-positive handling
 
@@ -68,18 +69,69 @@ non-discriminating. **The engine's separating power comes from scanner agreement
 + PoC + severity consistency, not catalogue presence.** Defensible finding: we
 tested and rejected two plausible reweightings with evidence.
 
-## NVD enrichment fix — the productive lever for CWE-less findings
+## Data-completeness improvements for CWE-less findings
+
+The reweighting experiments above showed that *reweighting* the confidence engine
+does not help. The productive lever is instead **improving CWE coverage** at the
+data layer — a missing CWE hurts a finding three ways (no catalogue credit, the
+CWE→CVSS vector inference can't run so the ML predicts Low, and the `cwe_mapping`
+factor scores 0). Two fixes address the two paths a finding gets a CWE.
+
+### (a) NVD enrichment — fixed and extended (for CVE-bearing findings)
 
 Investigating the inert CVE factor surfaced a real bug: `nvd_enrichment` was
 **silently non-functional locally** — it looked for `.json` (feeds are `.json.xz`),
-used the wrong top-level key, `json.load`-ed whole feeds (forbidden on the
-disk-full box), and resolved the wrong directory. So no finding ever received NVD
-CVSS *or* CWE data offline. Fixed to stream the `.xz` feeds with ijson (constant
-memory, wanted-ID cache) and to **back-fill an authoritative `cwe_id` from the NVD
-`weaknesses` block** when the scanner supplied none. Verified offline: a
-CVE-bearing finding with no CWE/CVSS gains CWE + full CVSS vector. This is the
-right way to help CWE-less findings (a correct data-completeness fix), as opposed
-to reweighting, which the experiments above showed does not help.
+used the wrong top-level key (feeds nest under `cve_items`), `json.load`-ed whole
+feeds (forbidden on the disk-full box), and resolved the wrong directory. So no
+finding ever received NVD CVSS *or* CWE data offline. Fixes:
+
+- **Stream the `.xz` feeds with ijson** (constant memory; only the CVE IDs being
+  looked up are cached, so feeds are scanned once per run, not per finding).
+- **Back-fill an authoritative `cwe_id` from the NVD `weaknesses` block** when the
+  scanner supplied none (prefers the Primary weakness; a scanner CWE is never
+  overwritten).
+- **Apply NVD's CVSS v3 as one authoritative, consistent set** (score, severity,
+  vector, sub-metrics together) instead of updating the score only when unset but
+  always overwriting the vector — which previously left a scanner's heuristic
+  score (e.g. Nuclei severity→7.5) paired with NVD's vector (which scored 10.0).
+  Also stopped nulling scanner-provided CVSS when a CVE has no v3 metrics.
+
+### (b) Keyword→CWE mapper — expanded and de-bugged (for CVE-less web findings)
+
+Web/DAST findings (ZAP alerts, Nuclei detections) often arrive with no CVE, so
+the NVD path can't help them; they rely on a static keyword→CWE table. That table
+had real defects and thin coverage:
+
+- **Bug — substring acronyms:** `rce` matched "sou**rce**", so "Source Code
+  Disclosure" mis-mapped to CWE-94 (RCE). Acronyms are now `\b`-anchored.
+- **Bug — cookie catch-all:** a bare `cookie` forced every cookie finding to
+  CWE-1004 (HttpOnly); Secure / SameSite / HttpOnly now map distinctly
+  (CWE-614 / CWE-1275 / CWE-1004).
+- **Ordering:** patterns are explicitly ordered specific→general so a general
+  rule can't shadow a specific one (first match wins); patterns are precompiled.
+- **Coverage 30→58 patterns** across injection, security headers/cookies/session/
+  CORS/config, transport/crypto, auth/credentials, info-disclosure and
+  memory-safety tiers.
+
+**Measured:** on 30 common web alerts previously uncovered or mis-mapped, coverage
+went **4/30 → 30/30**, with the RCE mis-map fixed.
+
+### End-to-end verification (ingest-based pipeline test)
+
+Live Juice Shop autoscans do **not** exercise either fix (Juice Shop yields no
+CVEs, and ZAP supplies its own CWE for its alerts), so both were verified by
+running the *actual pipeline engines* over crafted inputs: a ZAP report with no
+`<cweid>` and mappable titles, plus a Nuclei finding with a CVE but no CWE and a
+non-mappable name. Result: the three ZAP findings were filled by the **keyword
+mapper** (incl. Source Code Disclosure → CWE-540, the regression case), and the
+Nuclei finding was filled by **NVD back-fill** (CWE-1188 + a CVSS vector/score that
+now agree at 10.0). Correct boundary preserved: pure detection/informational
+templates (e.g. "Modern Web Application") still map to nothing — they are not
+weaknesses, so forcing a CWE would add noise.
+
+**Honest scope note:** the NVD back-fill only helps findings that carry a CVE
+(Nessus, some Nuclei); pure-ZAP web findings still depend on the keyword mapper.
+That is the correct boundary, not a gap.
 
 ## ML prioritiser (Random Forest) — accuracy caveat
 
