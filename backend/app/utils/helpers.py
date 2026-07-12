@@ -50,11 +50,20 @@ def cvss_score_to_severity(score: float) -> str:
 
 
 def extract_cwe_id(raw: str) -> str | None:
-    """Extract CWE-NNN from a raw string."""
+    """Extract CWE-NNN from a raw string.
+
+    Returns None for CWE-0, which scanners (e.g. ZAP) emit as a placeholder
+    meaning "no weakness assigned" — treating it as a real CWE would block the
+    keyword mapper / NVD back-fill and wrongly credit the cwe_mapping factor.
+    Non-numeric markers such as NVD-CWE-noinfo / NVD-CWE-Other already return
+    None (no CWE-<digits> match).
+    """
     if not raw:
         return None
     m = re.search(r"CWE-(\d+)", raw, re.IGNORECASE)
-    return f"CWE-{m.group(1)}" if m else None
+    if not m or int(m.group(1)) == 0:
+        return None
+    return f"CWE-{m.group(1)}"
 
 
 def extract_cve_id(raw: str) -> str | None:

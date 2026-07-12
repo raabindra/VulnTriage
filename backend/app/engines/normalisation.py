@@ -50,8 +50,10 @@ class NormalisationEngine:
         else:
             severity = normalize_severity(vuln.raw_severity or vuln.raw_risk or "")
 
-        # Normalise CWE
-        cwe_id = vuln.cwe_id or extract_cwe_id(vuln.description or "")
+        # Normalise CWE — run the scanner's own value through extract_cwe_id too,
+        # so placeholders like CWE-0 are dropped (-> None) and the mapper/NVD can
+        # fill a real weakness class instead of treating the placeholder as valid.
+        cwe_id = extract_cwe_id(vuln.cwe_id or "") or extract_cwe_id(vuln.description or "")
 
         # Normalise CVE
         cve_id = vuln.cve_id or extract_cve_id(vuln.reference or "")

@@ -53,9 +53,10 @@ class ZapParser:
         severity_word = raw_risk.split("(")[0].strip() if raw_risk else ""
 
         raw_cwe = text("cweid") or text("cwe")
-        cwe_id = None
-        if raw_cwe:
-            cwe_id = f"CWE-{raw_cwe}" if raw_cwe.isdigit() else extract_cwe_id(raw_cwe)
+        # Route through extract_cwe_id so ZAP's CWE-0 placeholder (cweid=0) is
+        # dropped rather than stored as a bogus "CWE-0".
+        cwe_id = extract_cwe_id(f"CWE-{raw_cwe}" if raw_cwe and raw_cwe.isdigit()
+                                else (raw_cwe or ""))
 
         # ZAP doesn't natively link CVEs; check references field
         references = text("reference") or ""
