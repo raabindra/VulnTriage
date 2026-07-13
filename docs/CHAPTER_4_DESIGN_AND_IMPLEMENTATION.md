@@ -553,17 +553,17 @@ flowchart TD
 
 Each principal screen is described below with reference to its screenshot. (The screenshots are collected, with justifications, in §4.6; here they are discussed from the standpoint of interface design.)
 
-**Authentication.** The login and registration screens (Figures 4.14 and 4.15) present a single focused form. Their minimalism reflects the design goal of moving the analyst into the workspace with the least friction; all other functionality is gated behind successful authentication.
+**Authentication.** The login and registration screens (Figures 4.18 and 4.19) present a single focused form. Their minimalism reflects the design goal of moving the analyst into the workspace with the least friction; all other functionality is gated behind successful authentication.
 
-**Dashboard.** The dashboard (Figure 4.16) is the landing screen and the clearest expression of the system's value. It is organised top-to-bottom in decreasing order of abstraction: four key-performance-indicator cards give the headline counts (Total Findings, Confirmed, Needs Review, Total Uploads); three charts characterise the dataset (a severity-breakdown pie, a classification-results pie, and a scans-by-tool bar chart); and a Top-10-by-CVSS table lets the analyst drill straight into the most severe findings. This layout embodies the "overview first, detail on demand" principle of information-dashboard design.
+**Dashboard.** The dashboard (Figure 4.20) is the landing screen and the clearest expression of the system's value. It is organised top-to-bottom in decreasing order of abstraction: four key-performance-indicator cards give the headline counts (Total Findings, Confirmed, Needs Review, Total Uploads); three charts characterise the dataset (a severity-breakdown pie, a classification-results pie, and a scans-by-tool bar chart); and a Top-10-by-CVSS table lets the analyst drill straight into the most severe findings. This layout embodies the "overview first, detail on demand" principle of information-dashboard design.
 
-**Upload.** The upload screen (Figure 4.17) is the primary ingestion path. It is divided into three regions: a scanner-type selector and drag-and-drop file zone; a *Pipeline Options* region exposing the Exploit-Lookup and PoC-Validation toggles, each annotated with a plain-language description of what it does and its safety implications; and an upload-history table with a per-row action to run the pipeline. Surfacing the two optional, potentially intrusive capabilities as clearly-labelled toggles — rather than hiding them in configuration — is a deliberate usability and safety decision.
+**Upload.** The upload screen (Figure 4.21) is the primary ingestion path. It is divided into three regions: a scanner-type selector and drag-and-drop file zone; a *Pipeline Options* region exposing the Exploit-Lookup and PoC-Validation toggles, each annotated with a plain-language description of what it does and its safety implications; and an upload-history table with a per-row action to run the pipeline. Surfacing the two optional, potentially intrusive capabilities as clearly-labelled toggles — rather than hiding them in configuration — is a deliberate usability and safety decision.
 
-**Auto Scan.** The Auto Scan screen (Figure 4.18) provides a target field, scanner check-boxes, and, crucially, an explicit authorisation acknowledgement that must be ticked before a scan can start. This gate is the interface-level expression of the responsible-operation principle.
+**Auto Scan.** The Auto Scan screen (Figure 4.22) provides a target field, scanner check-boxes, and, crucially, an explicit authorisation acknowledgement that must be ticked before a scan can start. This gate is the interface-level expression of the responsible-operation principle.
 
-**Findings.** The findings screen (Figure 4.19) is the analyst's primary working list: a filterable, sortable table of all normalised findings, with columns for severity, CVSS, classification, scanner, and CWE. The classification badge in each row lets the analyst immediately focus on *Confirmed* items and ignore auto-dismissed noise — the practical payoff of the whole system.
+**Findings.** The findings screen (Figure 4.23) is the analyst's primary working list: a filterable, sortable table of all normalised findings, with columns for severity, CVSS, classification, scanner, and CWE. The classification badge in each row lets the analyst immediately focus on *Confirmed* items and ignore auto-dismissed noise — the practical payoff of the whole system.
 
-**Finding detail.** The finding-detail screen (Figure 4.20) is the deepest and most important screen. It presents, in a single scroll, the finding's identity and metadata, its classification (with an override control), the **confidence score and its full six-factor breakdown** (discussed in detail in §4.5.4), the machine-learning priority prediction, the CVSS v3 metrics, the description and recommended solution, and the proof-of-concept evidence. This screen is where the system's commitment to explainability becomes concrete.
+**Finding detail.** The finding-detail screen (Figure 4.24) is the deepest and most important screen. It presents, in a single scroll, the finding's identity and metadata, its classification (with an override control), the **confidence score and its full six-factor breakdown** (discussed in detail in §4.5.4), the machine-learning priority prediction, the CVSS v3 metrics, the description and recommended solution, and the proof-of-concept evidence. This screen is where the system's commitment to explainability becomes concrete.
 
 ### 4.4.4 Storyboard
 
@@ -646,15 +646,63 @@ The prioritiser is a **Random Forest implemented in pure NumPy**, so that infere
 
 An honest limitation is stated for completeness: the CVSS base score is a deterministic function of its sub-metrics, so this task is close to deterministic and the model is effectively relearning the CVSS scoring formula. The high accuracy is therefore legitimate (there is no leakage) but reflects the near-deterministic nature of the task. The genuinely novel analytical contribution of the project is not this prioritiser but the Confidence Engine described next, which predicts something CVSS cannot express — the probability that a finding is a true positive.
 
+Table 4.1 lists the tools and libraries used to build and run the model.
+
+| Index | Tool / Library | Purpose |
+|-------|----------------|---------|
+| 1 | NumPy | Numerical arrays for the pure-Python Random Forest; the only dependency required at inference time. |
+| 2 | scikit-learn | Used during training only, for the stratified train/test split and evaluation utilities. |
+| 3 | ijson | Streams the compressed NVD JSON feeds with constant memory during training and enrichment. |
+| 4 | NVD JSON 2.0 feeds | The 108,495-record real-world training corpus (CVSS-v3 vectors + CWE, for 2023–2025). |
+
+**Table 4.1: Machine-Learning Component — Tools and Libraries**
+
+**Feature definition and the anti-leakage decision.** The single most important design decision in the model concerns *which inputs it is permitted to see*. Figure 4.13 shows the feature definition in `predictor.py`. The model is given the eight CVSS v3 sub-metrics (attack vector, attack complexity, privileges required, user interaction, scope, and the three impact metrics) together with the numeric CWE identifier — nine features in total — but it is deliberately *not* given the CVSS base score. The inline comment records the reason: because the training label (the severity band) is itself derived from the base score, feeding the score back in as an input would constitute *target leakage* and would let the model trivially reproduce the label, yielding a meaningless near-perfect accuracy. Excluding it forces the model to learn the relationship between the underlying vector components and the severity band, which is the genuine learning task.
+
+![Feature definition excluding the CVSS base score](images/code-ml-features.png)
+
+**Figure 4.13: Feature Definition (predictor.py) — the CVSS base score is deliberately excluded to prevent target leakage**
+
+**Feature extraction and inference.** Figure 4.14 shows how a stored finding is converted into a feature vector and classified. The `_build_feature_vector` method encodes each categorical CVSS sub-metric into an integer using a fixed mapping and extracts the numeric part of the CWE identifier; if the structured CWE is missing, it falls back to a keyword lookup on the finding's title and description, so that even a bare web finding yields usable features rather than an all-zero vector. The `predict_finding` method then loads the serialised model once, wraps the feature vector in a NumPy array, and calls the forest's `predict` and `predict_proba` methods to obtain both the predicted severity band and the per-class probabilities. The probabilities are persisted alongside the prediction so that the interface can display the model's confidence in each band, as seen in the "ML Priority Prediction" panel of the finding-detail screen (Figure 4.24).
+
+![Feature extraction and prediction](images/code-ml-inference.png)
+
+**Figure 4.14: Feature Extraction and Prediction (predictor.py)**
+
 ### 4.5.4 Confidence Scoring in Detail
 
-The Confidence Engine is the system's central innovation. It answers a different question from severity: **how likely is it that this finding is a genuine, actionable vulnerability rather than noise?** It computes a weighted score from six *reliability* factors, whose weights sum to 100: scanner agreement (25), severity consistency (20), CVE availability (15), exploit availability (15), PoC validation (15), and CWE mapping (10). The resulting 0–100 score is classified as **Confirmed (≥70)**, **Needs Manual Verification (40–69)**, or **Not Confirmed (<40)**; independently, a confirmed proof-of-concept check overrides the classification to *Confirmed*.
+The Confidence Engine is the system's central innovation. It answers a different question from severity: **how likely is it that this finding is a genuine, actionable vulnerability rather than noise?** It computes a weighted score from six *reliability* factors, whose weights sum to 100. Table 4.2 lists the factors, their weights, and what each measures.
 
-Figure 4.13 shows the confidence panel from the interface for a confirmed SQL-injection finding, which makes the computation concrete.
+| Factor | Weight | What it measures |
+|--------|:------:|------------------|
+| Scanner agreement | 25 | Independent corroboration — how many separate tools flagged the same issue. |
+| Severity consistency | 20 | Whether the ML-predicted severity agrees with the scanner's reported severity. |
+| CVE availability | 15 | Whether the finding maps to a catalogued CVE. |
+| Exploit availability | 15 | Whether a public exploit exists for the issue (via Exploit-DB). |
+| PoC validation | 15 | Whether an active, non-destructive check confirmed the issue. |
+| CWE mapping | 10 | Whether the finding has a recognised weakness class. |
+
+**Table 4.2: Confidence Engine — Factors and Weights**
+
+The resulting 0–100 score is classified as **Confirmed (≥70)**, **Needs Manual Verification (40–69)**, or **Not Confirmed (<40)**; independently, a confirmed proof-of-concept check overrides the classification to *Confirmed*.
+
+**The scoring computation.** Figure 4.15 shows the core of the scoring method. Each factor returns a raw score in the range 0–100; the total is the weighted sum of those raw scores (each divided by 100 and multiplied by its weight), capped to the 0–100 range. Two overrides then apply. First, if any *strong, vulnerability-specific* proof-of-concept check confirmed the finding, the classification is forced to *Confirmed* and the score is rescaled into the 70–100 band — but note the deliberate restriction to strong, type-matched check types, so that a generic input reflection or a server-banner match cannot spuriously confirm a finding. Second, a scanner-rated *informational* finding is bucketed as "Informational" rather than being given a true-or-false verdict, because such findings (technology or version detection) are not vulnerabilities to confirm or deny. Otherwise the numeric score is mapped to a classification by the threshold function.
+
+![Weighted scoring, PoC override, and classification](images/code-confidence-score.png)
+
+**Figure 4.15: Confidence Scoring — Weights, Weighted Sum, and Overrides (confidence_engine.py)**
+
+**How individual factors are computed.** Figure 4.16 shows two representative factor methods together with the classification-threshold function. The scanner-agreement factor scales with the number of corroborating scanners — a single scanner scores partially, whereas two or more score highly — and it returns a human-readable *reason* string that becomes part of the finding's rationale. The CVE-availability factor is binary on the presence of a catalogued CVE. The `_classify` function applies the fixed thresholds — 70 and 40 — that separate *Confirmed*, *Needs Manual Verification*, and *Not Confirmed*. Because every factor returns both a raw score and a reason, the final verdict is fully explainable rather than a black-box number.
+
+![Example factor computations and the classification thresholds](images/code-confidence-factor.png)
+
+**Figure 4.16: Example Factor Computations and Classification Thresholds (confidence_engine.py)**
+
+**A worked example.** Figure 4.17 shows the confidence panel from the interface for a confirmed SQL-injection finding, which makes the computation concrete.
 
 ![Confidence-score breakdown panel](images/11-confidence-panel.png)
 
-**Figure 4.13: Confidence-Score Breakdown (Finding Detail)**
+**Figure 4.17: Confidence-Score Breakdown (Finding Detail)**
 
 Reading the panel, the finding scores **81.3/100** and is classified *Confirmed*. The rationale line explains that a proof-of-concept check actively confirmed the vulnerability, which forced the *Confirmed* classification and scaled the score into the 70–100 band. Below the rationale, each of the six factors is shown with its individual contribution and weight: the CWE-mapping factor contributes its full amount because the finding is classified as CWE-89; the PoC-validation factor contributes because one of the controlled checks confirmed; the scanner-agreement factor contributes a partial amount because only one scanner reported the issue; and the severity-consistency factor contributes because the machine-learning priority is close to the scanner's severity. The CVE- and exploit-availability factors contribute nothing here, because this web finding carries no CVE and no known public exploit. This per-factor transparency is exactly what allows an analyst to trust — or challenge — the automated verdict, and the same breakdown is embedded in the PDF report.
 
@@ -662,7 +710,7 @@ On its curated evaluation benchmark, the Confidence Engine achieves a ROC-AUC of
 
 ### 4.5.5 Report Generation
 
-The final stage renders a professional PDF triage report suitable for handing to stakeholders. The report opens with a cover page carrying the report metadata and a severity summary (Figure 4.22), followed by an executive summary that narrates the scan and tabulates the classification and severity breakdowns (Figure 4.23), and then the per-finding detail including the confidence rationale. Because the report reads from the same normalised findings and confidence scores as the interface, the two views are always consistent.
+The final stage renders a professional PDF triage report suitable for handing to stakeholders. The report opens with a cover page carrying the report metadata and a severity summary (Figure 4.26), followed by an executive summary that narrates the scan and tabulates the classification and severity breakdowns (Figure 4.27), and then the per-finding detail including the confidence rationale. Because the report reads from the same normalised findings and confidence scores as the interface, the two views are always consistent.
 
 ---
 
@@ -674,64 +722,64 @@ This section presents annotated screenshots of the completed product with a just
 
 ![Login screen](images/01-login.png)
 
-**Figure 4.14: Login Screen.** *Justification.* The entry point demonstrates the JWT-secured authentication gate. All data routes are protected, and unauthenticated access redirects here. The focused, minimal form reflects the design priority of getting an analyst into the workspace quickly.
+**Figure 4.18: Login Screen.** *Justification.* The entry point demonstrates the JWT-secured authentication gate. All data routes are protected, and unauthenticated access redirects here. The focused, minimal form reflects the design priority of getting an analyst into the workspace quickly.
 
 ### 4.6.2 Registration
 
 ![Registration screen](images/02-register.png)
 
-**Figure 4.15: Registration Screen.** *Justification.* New analysts self-register; the API hashes the password and issues a token on success. It documents the complete account-creation path (UC1).
+**Figure 4.19: Registration Screen.** *Justification.* New analysts self-register; the API hashes the password and issues a token on success. It documents the complete account-creation path (UC1).
 
 ### 4.6.3 Dashboard
 
 ![Dashboard](images/03-dashboard.png)
 
-**Figure 4.16: Dashboard.** *Justification.* This is the analyst's landing view and the clearest demonstration of the system's value. The key-performance-indicator cards quantify the workload (sixteen findings, of which only four are *Confirmed* and none need review — the remainder auto-dismissed); the three charts characterise the dataset; and the Top-10 table surfaces the highest-CVSS findings with their classification and CWE. Together they show the triage system converting raw scanner noise into a prioritised, actionable shortlist.
+**Figure 4.20: Dashboard.** *Justification.* This is the analyst's landing view and the clearest demonstration of the system's value. The key-performance-indicator cards quantify the workload (sixteen findings, of which only four are *Confirmed* and none need review — the remainder auto-dismissed); the three charts characterise the dataset; and the Top-10 table surfaces the highest-CVSS findings with their classification and CWE. Together they show the triage system converting raw scanner noise into a prioritised, actionable shortlist.
 
 ### 4.6.4 Upload Scans
 
 ![Upload screen](images/04-upload.png)
 
-**Figure 4.17: Upload Screen.** *Justification.* This is the primary ingestion path (UC2). It shows the scanner-type selector, the drag-and-drop zone, the two clearly-labelled Pipeline Options (Exploit Lookup and PoC Validation) with their safety notes, and the upload-history table with a per-row *Run Pipeline* action.
+**Figure 4.21: Upload Screen.** *Justification.* This is the primary ingestion path (UC2). It shows the scanner-type selector, the drag-and-drop zone, the two clearly-labelled Pipeline Options (Exploit Lookup and PoC Validation) with their safety notes, and the upload-history table with a per-row *Run Pipeline* action.
 
 ### 4.6.5 Auto Scan
 
 ![Auto Scan screen](images/05-autoscan.png)
 
-**Figure 4.18: Auto Scan Screen.** *Justification.* This shows the optional orchestration layer (UC3): a target field, scanner selection, and the explicit authorisation acknowledgement that gates all active scanning. The screen embodies the responsible-use design constraint that intrusive scanning must be deliberately opted into.
+**Figure 4.22: Auto Scan Screen.** *Justification.* This shows the optional orchestration layer (UC3): a target field, scanner selection, and the explicit authorisation acknowledgement that gates all active scanning. The screen embodies the responsible-use design constraint that intrusive scanning must be deliberately opted into.
 
 ### 4.6.6 Findings
 
 ![Findings list](images/06-findings.png)
 
-**Figure 4.19: Findings List.** *Justification.* The working list (UC5), where an analyst filters and sorts the full set of normalised findings. Each row's classification badge lets the analyst focus immediately on *Confirmed* items, demonstrating the practical false-positive reduction the project set out to achieve.
+**Figure 4.23: Findings List.** *Justification.* The working list (UC5), where an analyst filters and sorts the full set of normalised findings. Each row's classification badge lets the analyst focus immediately on *Confirmed* items, demonstrating the practical false-positive reduction the project set out to achieve.
 
 ### 4.6.7 Finding Detail
 
 ![Finding detail](images/07-finding-detail.png)
 
-**Figure 4.20: Finding Detail.** *Justification.* The most important screen for the project's thesis. For the confirmed SQL-injection finding it shows the confidence score with its full six-factor breakdown, the machine-learning priority prediction, the CVSS v3 metrics, the description and recommended solution, and the proof-of-concept evidence that triggered the confirmation. This is the concrete realisation of explainable, evidence-backed triage. (The confidence panel is examined in isolation in Figure 4.13.)
+**Figure 4.24: Finding Detail.** *Justification.* The most important screen for the project's thesis. For the confirmed SQL-injection finding it shows the confidence score with its full six-factor breakdown, the machine-learning priority prediction, the CVSS v3 metrics, the description and recommended solution, and the proof-of-concept evidence that triggered the confirmation. This is the concrete realisation of explainable, evidence-backed triage. (The confidence panel is examined in isolation in Figure 4.17.)
 
 ### 4.6.8 Reports List
 
 ![Reports list](images/08-reports.png)
 
-**Figure 4.21: Reports List.** *Justification.* Completes the workflow (UC9): generated PDF reports are listed and downloadable, providing the deliverable an analyst hands to stakeholders.
+**Figure 4.25: Reports List.** *Justification.* Completes the workflow (UC9): generated PDF reports are listed and downloadable, providing the deliverable an analyst hands to stakeholders.
 
 ### 4.6.9 Generated PDF Report
 
 ![PDF report cover page](images/09-report-cover.png)
 
-**Figure 4.22: PDF Report — Cover and Severity Summary.** *Justification.* The report's cover page carries the report metadata (title, generation time, analyst, total findings) and an at-a-glance severity summary. It demonstrates that the system's output is a polished, stakeholder-ready document, not merely an on-screen view.
+**Figure 4.26: PDF Report — Cover and Severity Summary.** *Justification.* The report's cover page carries the report metadata (title, generation time, analyst, total findings) and an at-a-glance severity summary. It demonstrates that the system's output is a polished, stakeholder-ready document, not merely an on-screen view.
 
 ![PDF report executive summary](images/10-report-summary.png)
 
-**Figure 4.23: PDF Report — Executive Summary.** *Justification.* The executive-summary page narrates the scan and tabulates the classification breakdown (four *Confirmed*, four *Not Confirmed*, eight informational/unclassified) and the severity breakdown. It shows that the triage verdicts and analytics presented in the interface are carried faithfully into the exported report.
+**Figure 4.27: PDF Report — Executive Summary.** *Justification.* The executive-summary page narrates the scan and tabulates the classification breakdown (four *Confirmed*, four *Not Confirmed*, eight informational/unclassified) and the severity breakdown. It shows that the triage verdicts and analytics presented in the interface are carried faithfully into the exported report.
 
 ---
 
 ## 4.7 Summary
 
-This chapter presented the design and the completed implementation of VulnTriage using an object-oriented methodology. Section 4.2 set out the five design principles that govern the system and then modelled it with a layered system-architecture diagram, a use case diagram, an activity diagram of the triage pipeline, two sequence diagrams for the principal workflows, a class diagram separating domain models from engine services, and a two-level data flow diagram. Section 4.3 documented the nine-table relational schema as an entity-relationship diagram, described each table, and justified the normalisation and the single deliberate denormalisation. Section 4.4 described the interface-design philosophy, the navigation structure, each principal screen, and the user-journey storyboard. Section 4.5 explained how the system executes across its three deployment modes, detailed the ordered engine pipeline, described the machine-learning component and its anti-leakage design, and examined the Confidence Engine's scoring in depth using a real interface capture. Section 4.6 presented eleven annotated screenshots of the finished product — including the exported PDF report — with a justification for each.
+This chapter presented the design and the completed implementation of VulnTriage using an object-oriented methodology. Section 4.2 set out the five design principles that govern the system and then modelled it with a layered system-architecture diagram, a use case diagram, an activity diagram of the triage pipeline, two sequence diagrams for the principal workflows, a class diagram separating domain models from engine services, and a two-level data flow diagram. Section 4.3 documented the nine-table relational schema as an entity-relationship diagram, described each table, and justified the normalisation and the single deliberate denormalisation. Section 4.4 described the interface-design philosophy, the navigation structure, each principal screen, and the user-journey storyboard. Section 4.5 explained how the system executes across its three deployment modes, detailed the ordered engine pipeline, and examined the two most important pieces of the implementation at the source-code level — the machine-learning component (with its anti-leakage feature design and its inference code) and the Confidence Engine (with its weighted-scoring code, its factor computations, and a worked example from the interface). Section 4.6 presented eleven annotated screenshots of the finished product — including the exported PDF report — with a justification for each. In total the chapter contains twelve diagrams, four annotated code figures, eleven application screenshots, and two component tables.
 
 Taken together, these artefacts describe a fully realised system that ingests multi-scanner output and, through a normalisation–enrichment–prioritisation–confidence pipeline, produces explainable, prioritised, and confirmation-backed vulnerability findings. The following chapter evaluates the system's performance and effectiveness against the objectives established for the project.
