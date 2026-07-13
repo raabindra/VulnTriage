@@ -1,27 +1,60 @@
 # CHAPTER 4: DESIGN AND IMPLEMENTATION
 
 > **Project:** VulnTriage — AI-Assisted Vulnerability Triage and Confirmation System Using ML and Multi-Scanner Analysis
-> **Development model:** Object-Oriented Analysis and Design (OOAD); the UML diagrams below (use case, activity, sequence, class) and the ERD follow this methodology.
+> **Development model:** Object-Oriented Analysis and Design (OOAD). The UML diagrams below (use case, activity, sequence, class) and the ERD follow this methodology.
 >
-> *Diagrams are written in Mermaid and render on GitHub, VS Code (with the Mermaid extension), or at mermaid.live. Screenshots in §4.6 are real captures of the running web application.*
+> *Diagrams are written in Mermaid and render on GitHub, in VS Code (with a Mermaid extension), or at mermaid.live. All screenshots are real captures of the running web application. A Word (.docx) build of this chapter, with every diagram rasterised to an image, is provided alongside this file.*
 
 ---
 
 ## 4.1 Introduction
 
-This chapter documents the design and the completed implementation of **VulnTriage**, an AI-assisted vulnerability triage and confirmation system. The system does not perform scanning as its core function; instead it **ingests the output of established security scanners** (OWASP ZAP, Nuclei, and Nessus), then normalises, de-duplicates, enriches, prioritises, and **confidence-scores** each finding so that a security analyst can quickly separate genuine vulnerabilities from the large volume of false positives that scanners typically produce. An optional orchestration layer can additionally *drive* ZAP and Nuclei against an authorised target and feed their reports into the same pipeline.
+### 4.1.1 Purpose of the Chapter
 
-The chapter is organised as follows. Section 4.2 presents the system design — the layered architecture and the UML models (use case, activity, sequence, class) together with a Data Flow Diagram. Section 4.3 documents the database design as an Entity-Relationship Diagram with a description of each table. Section 4.4 covers the interface design — navigation structure, screen design, and the storyboard of the user journey. Section 4.5 describes the execution of the system across its three deployment modes and the internal triage pipeline. Section 4.6 presents annotated screenshots of the completed product with justification for each. Section 4.7 summarises the chapter.
+This chapter documents both the **design** and the completed **implementation** of VulnTriage. Where the earlier chapters established *what* the system needed to do and *why*, this chapter shows *how* the system was realised: the architecture that structures it, the models that describe its behaviour and data, the interface through which an analyst operates it, and the finished artefacts (screens and reports) it produces. Every design artefact is accompanied by an explanation of the decisions behind it, so that the chapter can be read as a self-contained account of the system's construction.
 
-The system is built with a **Flask + SQLAlchemy** backend exposing a JWT-secured REST API, a **React 18 + Vite + Tailwind** single-page front end, and a **pure-NumPy Random Forest** machine-learning model for severity prioritisation. It runs in three modes from a single codebase: a desktop application, a Dockerised web application, and a command-line interface.
+### 4.1.2 Problem Recap and the System's Role
+
+Automated vulnerability scanners are effective at *breadth* — they probe a target with hundreds of checks and emit large volumes of findings — but they are notoriously weak at *precision*. A typical scan report mixes a handful of genuine, exploitable weaknesses with a much larger number of low-value or spurious findings (missing headers, informational disclosures, version-based guesses, and outright false positives). Security analysts therefore spend a disproportionate share of their time manually sifting reports, a task that does not scale and that suffers from fatigue-driven error.
+
+VulnTriage addresses this by acting as an **intelligent triage layer that sits after the scanners**. It does not attempt to replace ZAP, Nuclei, or Nessus; instead it *consumes* their output and applies a sequence of automated reasoning steps — normalisation, de-duplication, enrichment, machine-learning prioritisation, confidence scoring, and optional active proof-of-concept validation — to transform a raw, noisy report into a **prioritised, confidence-scored, and evidence-backed shortlist**. The distinctive contribution is the **Confidence Engine**, which estimates the probability that a finding is a *true positive* (worth an analyst's attention) rather than merely how *severe* it would be if real.
+
+### 4.1.3 Methodology and Its Design Artefacts
+
+The system was designed using **Object-Oriented Analysis and Design (OOAD)**. OOAD was chosen because the problem domain decomposes naturally into objects with clear responsibilities: persistent domain entities (users, uploads, findings, scores, reports) and behavioural service objects (the pipeline engines). This decomposition maps directly onto the Python class model used in the implementation and onto the standard set of UML artefacts that OOAD prescribes. Consequently, this chapter presents:
+
+- a **use case diagram** capturing the actors and the functions they invoke (§4.2.3);
+- an **activity diagram** modelling the control flow of the triage pipeline (§4.2.4);
+- two **sequence diagrams** modelling the object interactions for the two principal workflows (§4.2.5);
+- a **class diagram** describing the static structure of the domain and service objects (§4.2.6);
+- **data flow diagrams** at two levels of abstraction (§4.2.7); and
+- an **entity-relationship diagram** describing the persistent schema (§4.3).
+
+### 4.1.4 Summary of What Was Implemented
+
+The completed system comprises a **Flask + SQLAlchemy** backend exposing a JWT-secured REST API; a **React 18 + Vite + Tailwind** single-page front end; a **pure-NumPy Random Forest** machine-learning model for severity prioritisation; a suite of nine independent pipeline engines; parsers for three scanner formats; and a PDF report generator. It runs, from a single codebase, in three deployment modes — a native desktop application, a Dockerised web application, and a command-line interface — and is backed by a nine-table relational schema that operates on either PostgreSQL or SQLite.
 
 ---
 
 ## 4.2 Design
 
-### 4.2.1 System Architecture
+### 4.2.1 Design Principles and Patterns
 
-VulnTriage follows a layered, service-oriented architecture. The **presentation layer** offers three interchangeable front ends (web SPA, desktop window, CLI) that all reach the same **application/API layer**. That layer delegates to a set of independent **engine services** that form the triage pipeline. Engines read and write through the **data layer** (SQLAlchemy ORM over PostgreSQL or SQLite) and draw on three **supporting resources**: the trained ML model, the offline NVD data feeds, and — for the optional Auto Scan — the external scanner binaries.
+The design is governed by five principles that recur throughout the system and explain most of its structural decisions.
+
+1. **Separation of scanning from triage.** The core competence of the system is *triage*, so scanners are treated as interchangeable *sources* rather than as parts of the system. Each scanner has its own parser that converts a native report into a common `Vulnerability` record; from that point on, every engine is scanner-agnostic. This makes it trivial to add a new scanner (write one parser) without touching the analytical pipeline.
+
+2. **Single-responsibility engine services (the pipeline pattern).** Each analytical stage is implemented as a self-contained class that performs exactly one transformation: it reads findings from the database, applies its logic, and writes the results back. Because the stages communicate only through the shared data store and not directly with one another, the pipeline can be tested stage-by-stage, reordered, or extended, and the identical engines are reused by all three front ends.
+
+3. **Offline-first enrichment.** External reference data (the National Vulnerability Database) is consumed from **local compressed feeds streamed with constant memory**, so enrichment functions without internet access; the live NVD API is retained only as a fallback. This is a deliberate robustness decision for an environment where outbound network access is restricted.
+
+4. **Explainability by construction.** The system never emits an unexplained verdict. The Confidence Engine records, for every finding, a per-factor breakdown and a human-readable rationale, which are surfaced identically in the user interface and in the PDF report. This makes the automated judgement auditable — essential for a security tool whose recommendations drive analyst action.
+
+5. **Responsible, authorised operation.** Any capability that generates outbound traffic to a target — the optional Auto Scan and the active PoC checks — is gated behind an explicit authorisation acknowledgement and, for PoC probes, a host **scope guard** that suppresses requests to out-of-scope hosts.
+
+### 4.2.2 System Architecture
+
+VulnTriage adopts a **layered, service-oriented architecture** with four tiers and a set of supporting resources. Figure 4.1 shows the arrangement.
 
 ```mermaid
 flowchart TB
@@ -73,16 +106,23 @@ flowchart TB
     ORCH -. drives .-> SCAN
 ```
 
-**Key design decisions.**
+**Figure 4.1: System Architecture**
 
-- **Separation of scanning from triage.** The core value is triage, so scanners are treated as pluggable *sources*. Each scanner has a dedicated parser that converts its native report into a common `Vulnerability` record; every downstream engine is scanner-agnostic.
-- **Engines as independent, single-responsibility services.** Each pipeline stage is a self-contained class that reads findings from the database, performs one transformation, and writes results back. This makes the pipeline testable stage-by-stage and reusable across all three front ends.
-- **Offline-first enrichment.** NVD data is read from local JSON feeds streamed straight from `.xz` (constant memory), so enrichment works without internet access; the live NVD API is only a fallback.
-- **Explainability by construction.** The Confidence Engine records a per-factor breakdown and a human-readable rationale for every score, which is surfaced in both the UI and the PDF report.
+The four tiers are as follows.
 
-### 4.2.2 Use Case Diagram
+- **Presentation layer.** Three front ends provide interchangeable access to the same functionality. The React single-page application is the primary interface; the desktop application wraps the same compiled front end in a native window using pywebview and a waitress server; and the command-line interface offers scriptable, headless access for automation. The web and desktop clients communicate with the backend exclusively over the REST API, whereas the CLI invokes the engine services directly in-process.
 
-The primary actor is the **Security Analyst**. Two supporting actors are external: the **Scanner Tools** (ZAP/Nuclei/Nessus, driven during Auto Scan) and the **NVD Data Source** (the offline feeds / API used for enrichment).
+- **Application / API layer.** Implemented in Flask and organised as six blueprints (`auth`, `upload`, `pipeline`, `vulnerabilities`, `dashboard`, `reports`), this layer authenticates requests via JSON Web Tokens, validates input, and orchestrates the engine services. It is deliberately thin: it contains coordination logic but no analytical logic, which lives entirely in the engine layer.
+
+- **Engine services (the triage pipeline).** This is the analytical core: nine pipeline engines plus the Auto Scan orchestrator and the scanner runner. Each engine is a single-responsibility class (detailed in §4.5.2).
+
+- **Data layer.** All state is persisted through the SQLAlchemy Object-Relational Mapper, which abstracts over the choice of PostgreSQL (for the web deployment) or SQLite (for the desktop and CLI deployments). Because the models use only generic column types, the same schema runs unchanged on both engines.
+
+- **Supporting resources.** Three external resources support the pipeline: the serialised Random Forest model that the ML predictor loads, the compressed NVD feeds that the enrichment engine streams, and the scanner binaries that the Auto Scan orchestrator drives.
+
+### 4.2.3 Use Case Diagram
+
+The system has one primary human actor, the **Security Analyst**, and two supporting (non-human) actors: the **Scanner Tools** that are driven during Auto Scan, and the **NVD Data Source** consulted during enrichment. Figure 4.2 shows the use cases.
 
 ```mermaid
 flowchart LR
@@ -109,24 +149,26 @@ flowchart LR
     UC3 -. triggers enrichment .-> NVDSRC
 ```
 
-**Use case summary.**
+**Figure 4.2: Use Case Diagram**
 
-| # | Use case | Description |
-|---|----------|-------------|
-| UC1 | Register / Log in | Create an account and authenticate; the API issues a JWT used for all subsequent requests. |
-| UC2 | Upload scanner report | Submit a ZAP XML, Nuclei JSONL, or Nessus `.nessus` file; the system parses and runs the triage pipeline. |
-| UC3 | Run Auto Scan | Drive ZAP and Nuclei against an authorised target, then triage the combined output (requires an explicit authorisation acknowledgement). |
-| UC4 | View dashboard | See totals, severity/classification breakdowns, scans-by-tool, and the top findings by CVSS. |
-| UC5 | Browse findings | List, search, and filter normalised findings by severity and classification. |
-| UC6 | View finding detail | Inspect a finding's confidence score, the six-factor breakdown and rationale, ML prediction, CVSS metrics, and PoC evidence. |
-| UC7 | Override classification | Manually set a finding's classification when analyst judgement differs from the automated verdict. |
-| UC8 | Run PoC validation | Execute non-destructive proof-of-concept checks against an in-scope target to confirm exploitability. |
-| UC9 | Generate report | Produce a PDF triage report and download it. |
-| UC10 | Clear session data | Reset the workspace to start a fresh triage session. |
+Each use case is described below, including its precondition and its main outcome, so that the intended behaviour is unambiguous.
 
-### 4.2.3 Activity Diagram — The Triage Pipeline
+| # | Use case | Precondition | Description and outcome |
+|---|----------|--------------|-------------------------|
+| UC1 | Register / Log in | — | The analyst creates an account or authenticates with an email and password. On success the API issues a JWT that authorises all subsequent requests. |
+| UC2 | Upload scanner report | Authenticated | The analyst submits a ZAP XML, Nuclei JSONL, or Nessus `.nessus` file. The system parses it and runs the full triage pipeline, producing normalised, scored findings. |
+| UC3 | Run Auto Scan | Authenticated; authorisation acknowledged | The system drives ZAP and Nuclei against a specified target, then triages the combined output. Requires an explicit authorisation acknowledgement because active scanning is intrusive. |
+| UC4 | View dashboard | Authenticated; data present | The analyst sees aggregate metrics: totals, severity and classification breakdowns, scans-by-tool, and the highest-CVSS findings. |
+| UC5 | Browse & filter findings | Authenticated; data present | The analyst lists, searches, and filters normalised findings by severity and classification. |
+| UC6 | View finding detail | A finding selected | The analyst inspects a finding's confidence score, six-factor breakdown and rationale, ML prediction, CVSS metrics, description/solution, and PoC evidence. |
+| UC7 | Override classification | Viewing a finding | The analyst manually sets a finding's classification when professional judgement differs from the automated verdict. |
+| UC8 | Run PoC validation | Findings with testable URLs; in scope | The system performs non-destructive proof-of-concept checks against authorised targets; a confirmed check overrides the classification to *Confirmed*. |
+| UC9 | Generate & download report | Data present | The system renders a PDF triage report, which the analyst downloads. |
+| UC10 | Clear session data | Authenticated | The analyst resets the workspace to begin a fresh triage session. |
 
-The heart of the system is the unified triage pipeline. The activity diagram below shows the flow from an ingested report to a finished PDF report, including the two conditional branches (optional exploit lookup and optional PoC validation) and the PoC-confirmation override.
+### 4.2.4 Activity Diagram — The Triage Pipeline
+
+The central behaviour of the system is the triage pipeline. Figure 4.3 models it as an activity flow, from an ingested report to a finished PDF report, including the two conditional branches (optional exploit lookup and optional PoC validation) and the proof-of-concept confirmation override.
 
 ```mermaid
 flowchart TD
@@ -151,9 +193,15 @@ flowchart TD
     RPT --> END([End])
 ```
 
-### 4.2.4 Sequence Diagrams
+**Figure 4.3: Activity Diagram — Triage Pipeline**
 
-**(a) Upload and triage.** The most common interaction: the analyst uploads a report through the SPA, and the pipeline runs to completion.
+The flow begins with **parsing**, which converts the scanner's native format into common `Vulnerability` records. **Normalisation** then unifies inconsistent severity labels, CWE identifiers, and field names into a canonical shape, and **de-duplication** collapses repeated findings — including the same issue reported by multiple scanners, which is recorded by incrementing a `scanner_count` that later strengthens confidence. **CWE mapping** assigns a weakness class where the scanner provided none, and **NVD enrichment** fills authoritative CVSS data and back-fills a CWE for findings that carry a CVE. For findings that still lack a CVSS vector (typical of web scanners such as ZAP), **CWE→CVSS enrichment** derives a plausible vector from the CWE so that the machine-learning model receives meaningful features rather than zeros. **ML prioritisation** predicts a severity band, and the optional **exploit lookup** annotates findings for which a public exploit exists. **Confidence scoring** then combines six reliability factors into a 0–100 score and a classification. If **PoC validation** is requested, the system performs non-destructive checks; a confirmed check triggers the **override** that forces the classification to *Confirmed*. Finally, the **report generator** renders the PDF.
+
+### 4.2.5 Sequence Diagrams
+
+Two workflows dominate the system's behaviour, and each is modelled as a sequence diagram to show the object interactions over time.
+
+**(a) Upload and triage.** Figure 4.4 shows the most common interaction: the analyst uploads a report through the single-page application, and the pipeline runs to completion.
 
 ```mermaid
 sequenceDiagram
@@ -183,7 +231,11 @@ sequenceDiagram
     SPA-->>Analyst: Updated dashboard & findings
 ```
 
-**(b) Auto Scan orchestration.** The optional layer drives the scanners sequentially, then runs one unified pipeline so cross-scanner duplicates merge.
+**Figure 4.4: Sequence Diagram — Upload and Triage**
+
+The diagram makes explicit the two-step nature of ingestion: the upload request first persists the raw findings, and a subsequent pipeline request runs the analytical engines. The optional PoC block is drawn as an `opt` fragment because it executes only when the analyst has requested validation and the target is in scope.
+
+**(b) Auto Scan orchestration.** Figure 4.5 shows the optional orchestration workflow, in which the system itself drives the scanners before triaging their output.
 
 ```mermaid
 sequenceDiagram
@@ -209,9 +261,13 @@ sequenceDiagram
     API-->>Analyst: progress + report link
 ```
 
-### 4.2.5 Class Diagram
+**Figure 4.5: Sequence Diagram — Auto Scan Orchestration**
 
-The design cleanly separates **persistent domain models** (SQLAlchemy entities) from **engine services** (stateless processors). The diagram is simplified to the principal classes and relationships.
+A key design detail visible here is that the scanners are driven **sequentially, not concurrently**: the orchestrator runs ZAP to completion before starting Nuclei. This was a deliberate decision, because running a heavyweight active scan (ZAP, which additionally launches a headless browser for its AJAX spider) alongside a second scanner risks exhausting the host's memory. After both scanners finish, a **single unified pipeline** runs across all of their uploads at once, so that a finding reported by both scanners is merged into one record with a higher corroboration count.
+
+### 4.2.6 Class Diagram
+
+The static structure separates **persistent domain models** (SQLAlchemy entities that represent stored data) from **engine services** (stateless processors that transform that data). Figure 4.6 shows the principal classes; attributes and methods are abbreviated for readability.
 
 ```mermaid
 classDiagram
@@ -305,9 +361,13 @@ classDiagram
     PocValidator ..> NormalizedFinding : validates
 ```
 
-### 4.2.6 Data Flow Diagram (DFD)
+**Figure 4.6: Class Diagram**
 
-**Level 0 (context).** VulnTriage sits between the analyst and the external data sources.
+The solid arrows denote *associations* (ownership relationships that are persisted as foreign keys), while the dashed arrows denote *dependencies* (an engine acting upon a model without owning it). This clean split — data classes that hold state and know nothing about processing, and engine classes that hold no state and act upon the data classes — is the object-oriented realisation of the single-responsibility principle from §4.2.1, and it is what allows each engine to be unit-tested against lightweight stand-in objects.
+
+### 4.2.7 Data Flow Diagrams
+
+The data flow is presented at two levels of abstraction. Figure 4.7 is the **Level 0 (context) diagram**, which treats the whole system as a single process and shows only its external interactions.
 
 ```mermaid
 flowchart LR
@@ -321,7 +381,9 @@ flowchart LR
     SYS -- "triaged findings,<br/>confidence, PDF report" --> ANALYST
 ```
 
-**Level 1.** The internal processes and data stores.
+**Figure 4.7: Data Flow Diagram — Level 0 (Context)**
+
+Figure 4.8 is the **Level 1 diagram**, which decomposes the system into its seven internal processes and the four data stores through which they communicate. The data stores correspond directly to groups of database tables (§4.3), which reinforces the pipeline design in which stages exchange data only through persistence.
 
 ```mermaid
 flowchart TB
@@ -348,11 +410,15 @@ flowchart TB
     P7 -->|PDF| ANALYST
 ```
 
+**Figure 4.8: Data Flow Diagram — Level 1**
+
 ---
 
 ## 4.3 Database Design
 
-The system uses a relational schema of **nine tables** managed through the SQLAlchemy ORM. The models use generic column types (including `db.JSON`), so the identical schema runs on **PostgreSQL** (web/production) and **SQLite** (desktop/CLI). The Entity-Relationship Diagram below shows the entities, their key attributes, and their relationships.
+### 4.3.1 Design Approach
+
+The persistent data is modelled as a **normalised relational schema** accessed through the SQLAlchemy Object-Relational Mapper. Two decisions shape the design. First, the schema is engine-portable: the models use only generic column types (including a generic `JSON` type rather than any PostgreSQL-specific type), so that the identical schema runs on **PostgreSQL** for the web deployment and on **SQLite** for the desktop and CLI deployments. Second, the schema deliberately preserves an **audit trail**: the raw findings exactly as the scanner reported them are retained in a `vulnerabilities` table, separate from the canonical `normalized_findings` that the pipeline operates on, so that it is always possible to trace a triaged finding back to the original scanner output. Figure 4.9 shows the entity-relationship diagram.
 
 ```mermaid
 erDiagram
@@ -436,29 +502,37 @@ erDiagram
     }
 ```
 
-**Table descriptions.**
+**Figure 4.9: Entity-Relationship Diagram**
 
-| Table | Purpose |
-|-------|---------|
-| `users` | Registered analysts; stores a hashed password and role. Owns uploads and reports. |
-| `scanner_uploads` | One row per submitted scan file (or per scanner in an Auto Scan run); tracks scanner type, processing status, and finding count. |
-| `vulnerabilities` | Raw findings exactly as parsed from a scanner report, before normalisation — preserves an audit trail of what each tool reported. |
-| `normalized_findings` | The canonical, de-duplicated findings that the whole pipeline operates on; carries a SHA-256 `group_hash` for merging, the unified severity/CWE/CVSS fields, `scanner_count` (cross-tool corroboration), and the final `classification`. |
-| `confidence_scores` | One score per finding (0–100) plus the six per-factor sub-scores and the JSON `factor_breakdown` used for explainability. |
-| `ml_predictions` | The Random Forest's predicted severity band and the exact feature vector used, for traceability. |
-| `poc_validations` | Results of non-destructive proof-of-concept checks (type, result, evidence); a confirmed result overrides the classification. |
-| `reports` | Generated PDF reports; `upload_ids` (JSON) records which uploads a report covers. |
-| `cwe_mappings` | A reference table of CWE identifiers with names and OWASP categories, used for display and seeding. |
+### 4.3.2 Table Descriptions
 
-The `cwe_mappings` table is a standalone reference (no foreign key). `reports.upload_ids` intentionally uses a JSON array rather than a join table because a report can span an arbitrary set of uploads.
+| Table | Purpose and notable fields |
+|-------|----------------------------|
+| `users` | Registered analysts. Stores a hashed password (never plaintext) and a role. Owns uploads and reports via one-to-many relationships. |
+| `scanner_uploads` | One row per submitted scan file (or per scanner within an Auto Scan run). Tracks the `scanner_type`, the processing `status`, and the resulting `vulnerability_count`. |
+| `vulnerabilities` | The raw findings exactly as parsed from a scanner report, before normalisation. This table is the audit trail that links every triaged result back to its source. |
+| `normalized_findings` | The canonical, de-duplicated findings on which the whole pipeline operates. The `group_hash` (a SHA-256 digest) is the key used to merge duplicates; `scanner_count` records how many scanners corroborated the finding; and `classification` holds the final verdict. |
+| `confidence_scores` | One score (0–100) per finding, together with the six per-factor sub-scores and a JSON `factor_breakdown` that stores the full explanation used for the rationale. |
+| `ml_predictions` | The Random Forest's predicted severity band and the exact `feature_vector` used to produce it, retained for traceability and debugging. |
+| `poc_validations` | The results of non-destructive proof-of-concept checks — the `validation_type`, the `result` (confirmed / not confirmed / skipped / error), and the `evidence`. A confirmed result overrides the classification. |
+| `reports` | Generated PDF reports. The `upload_ids` field (a JSON array) records which uploads a report covers. |
+| `cwe_mappings` | A reference table of CWE identifiers with names and OWASP categories, used for display and for seeding. |
+
+### 4.3.3 Relationships and Normalisation
+
+The schema is in third normal form. The relationship chain `users → scanner_uploads → vulnerabilities → normalized_findings` models the natural ownership hierarchy from an analyst down to an individual finding. The three analytical tables (`confidence_scores`, `ml_predictions`, `poc_validations`) attach to `normalized_findings` rather than to the raw `vulnerabilities`, because analysis is performed on the canonical findings. The `cwe_mappings` table is an independent reference table with no foreign key, since it describes weakness classes in the abstract rather than any particular finding. The one intentional denormalisation is `reports.upload_ids`, which stores a set of upload identifiers as a JSON array rather than in a separate join table; this was chosen because a report may span an arbitrary set of uploads and is only ever read as a whole, so a join table would add complexity without benefit.
 
 ---
 
 ## 4.4 Interface Design
 
-The web front end is a single-page application with a **persistent left navigation sidebar** and a content area. The design language is a clean, dark-sidebar / light-content dashboard using Tailwind CSS, prioritising scannability of tabular security data.
+### 4.4.1 Design Philosophy
 
-### 4.4.1 Navigation Structure
+The web interface is a single-page application whose visual language is a **dashboard with a persistent dark navigation sidebar and a light content area**, implemented with Tailwind CSS. The design prioritises the rapid scanning of tabular security data: severity and classification are always encoded with **consistent colour semantics** (red for critical/high, amber for medium, green for low/confirmed, grey for informational), so that an analyst can absorb the state of a scan at a glance. Every authenticated screen shares a common layout — the sidebar for navigation and a header showing the current user and a logout control — so that navigation is predictable and the analyst is never disoriented.
+
+### 4.4.2 Navigation Structure
+
+Figure 4.10 shows the navigation map. Access control is enforced by a client-side route guard: unauthenticated users are redirected to the login screen, and all data screens sit behind that guard.
 
 ```mermaid
 flowchart TD
@@ -473,18 +547,27 @@ flowchart TD
     AUTO -. "runs pipeline" .-> FIND
 ```
 
-Every authenticated route shares a common layout: the sidebar (Dashboard, Upload Scans, Auto Scan, Findings, Reports) plus a header showing the current user and a Logout control. Unauthenticated users are redirected to `/login`; a `PrivateRoute` guard protects all data routes.
+**Figure 4.10: Navigation Structure**
 
-### 4.4.2 Screen and Content Design
+### 4.4.3 Screen Design
 
-- **Dashboard** — an at-a-glance summary: four KPI cards (Total Findings, Confirmed, Needs Review, Total Uploads), three charts (severity breakdown, classification results, scans by tool), and a Top-10-by-CVSS table.
-- **Upload Scans** — a form to select the scanner type and file, with toggles for Exploit Lookup and PoC Validation (plus an optional authorisation scope field).
-- **Auto Scan** — a target field, scanner check-boxes (ZAP/Nuclei), an authorisation acknowledgement, and a live progress indicator.
-- **Findings** — a filterable, sortable table of all normalised findings with severity, CVSS, classification, scanner, and CWE columns.
-- **Finding detail** — the deepest screen: the confidence score with its six-factor breakdown and rationale, the ML priority prediction, the CVSS v3 metrics, description/solution, and the PoC evidence.
-- **Reports** — a list of generated PDF reports with download links.
+Each principal screen is described below with reference to its screenshot. (The screenshots are collected, with justifications, in §4.6; here they are discussed from the standpoint of interface design.)
 
-### 4.4.3 Storyboard (User Journey)
+**Authentication.** The login and registration screens (Figures 4.14 and 4.15) present a single focused form. Their minimalism reflects the design goal of moving the analyst into the workspace with the least friction; all other functionality is gated behind successful authentication.
+
+**Dashboard.** The dashboard (Figure 4.16) is the landing screen and the clearest expression of the system's value. It is organised top-to-bottom in decreasing order of abstraction: four key-performance-indicator cards give the headline counts (Total Findings, Confirmed, Needs Review, Total Uploads); three charts characterise the dataset (a severity-breakdown pie, a classification-results pie, and a scans-by-tool bar chart); and a Top-10-by-CVSS table lets the analyst drill straight into the most severe findings. This layout embodies the "overview first, detail on demand" principle of information-dashboard design.
+
+**Upload.** The upload screen (Figure 4.17) is the primary ingestion path. It is divided into three regions: a scanner-type selector and drag-and-drop file zone; a *Pipeline Options* region exposing the Exploit-Lookup and PoC-Validation toggles, each annotated with a plain-language description of what it does and its safety implications; and an upload-history table with a per-row action to run the pipeline. Surfacing the two optional, potentially intrusive capabilities as clearly-labelled toggles — rather than hiding them in configuration — is a deliberate usability and safety decision.
+
+**Auto Scan.** The Auto Scan screen (Figure 4.18) provides a target field, scanner check-boxes, and, crucially, an explicit authorisation acknowledgement that must be ticked before a scan can start. This gate is the interface-level expression of the responsible-operation principle.
+
+**Findings.** The findings screen (Figure 4.19) is the analyst's primary working list: a filterable, sortable table of all normalised findings, with columns for severity, CVSS, classification, scanner, and CWE. The classification badge in each row lets the analyst immediately focus on *Confirmed* items and ignore auto-dismissed noise — the practical payoff of the whole system.
+
+**Finding detail.** The finding-detail screen (Figure 4.20) is the deepest and most important screen. It presents, in a single scroll, the finding's identity and metadata, its classification (with an override control), the **confidence score and its full six-factor breakdown** (discussed in detail in §4.5.4), the machine-learning priority prediction, the CVSS v3 metrics, the description and recommended solution, and the proof-of-concept evidence. This screen is where the system's commitment to explainability becomes concrete.
+
+### 4.4.4 Storyboard
+
+Figure 4.11 summarises the intended user journey through the interface, from authentication to the final report.
 
 ```mermaid
 flowchart LR
@@ -496,98 +579,159 @@ flowchart LR
     F --> G["Generate & download<br/>the PDF report"]
 ```
 
+**Figure 4.11: Storyboard — User Journey**
+
 ---
 
 ## 4.5 Execution
 
 ### 4.5.1 Deployment Modes
 
-From a single codebase, VulnTriage runs in three modes so it suits both interactive analysis and automation:
+From a single codebase, VulnTriage runs in three modes so that it suits both interactive analysis and automation. Figure 4.12 shows how the three modes share the engine pipeline and the model while differing in their front end and database.
 
-1. **Desktop application** — a native window (pywebview + waitress) backed by SQLite at the user's data directory; launched from the OS menu. Suited to a single analyst on a workstation.
-2. **Dockerised web application** — `docker compose up` serves the built SPA and API together on `localhost:5000`, backed by PostgreSQL. Suited to a shared/team deployment.
-3. **Command-line interface** — `python cli.py scan <file> -s <scanner> [--poc] [--exploits] [-o out.pdf]` and `cli.py autoscan <target> -s zap,nuclei --authorise`. Suited to scripting and CI pipelines.
+```mermaid
+flowchart TB
+    subgraph M1["Desktop Application"]
+        D1["pywebview window"] --> D2["waitress server"]
+        D2 --> D3[("SQLite (user data dir)")]
+    end
+    subgraph M2["Docker Web Application"]
+        W1["Browser SPA"] --> W2["Flask + gunicorn"]
+        W2 --> W3[("PostgreSQL")]
+    end
+    subgraph M3["Command-Line Interface"]
+        C1["cli.py"] --> C2[("SQLite (./vulntriage.db)")]
+    end
+    CORE["Shared engine pipeline + Random Forest model"]
+    D2 --> CORE
+    W2 --> CORE
+    C1 --> CORE
+```
 
-All three share the identical engine pipeline, so results are consistent regardless of how the system is invoked.
+**Figure 4.12: Deployment Diagram — Three Run Modes**
+
+1. **Desktop application.** A native window built with pywebview serves the compiled front end through an embedded waitress server, backed by a SQLite database in the user's data directory. This mode targets a single analyst working on a workstation and requires no infrastructure; it launches from the operating-system menu and logs in with default credentials.
+
+2. **Dockerised web application.** A `docker compose up` command builds and serves the front end and the API together on `localhost:5000`, backed by PostgreSQL. This mode targets a shared or team deployment and pins the container to a Python version for which all machine-learning dependencies have pre-built wheels.
+
+3. **Command-line interface.** The `cli.py` entry point offers `scan` and `autoscan` sub-commands that run the identical pipeline headlessly and default to a local SQLite database. This mode targets scripting, automation, and continuous-integration use.
+
+Because all three modes invoke the same engine services, their triage results are identical regardless of how the system is invoked — a direct benefit of the single-responsibility engine design.
 
 ### 4.5.2 Pipeline Execution
 
-When a report is ingested (by upload, CLI, or Auto Scan) the engines run in a fixed order, each reading and writing through the ORM:
+When a report is ingested — whether by upload, by the CLI, or by an Auto Scan — the engines execute in a fixed order, each reading and writing through the ORM:
 
-`normalisation → deduplication → cwe_mapper → nvd_enrichment → cwe_cvss_enrichment → ml/predictor → confidence_engine → (optional) poc_validator → report_generator`
+```
+normalisation → deduplication → cwe_mapper → nvd_enrichment
+  → cwe_cvss_enrichment → ml/predictor → confidence_engine
+  → (optional) poc_validator → report_generator
+```
 
-- **Normalisation** unifies severities, CWE identifiers (dropping placeholders such as `CWE-0`), and field names into a common shape.
-- **Deduplication** computes a SHA-256 `group_hash` and merges duplicates, including the same issue reported by different scanners — raising `scanner_count`, which strengthens confidence.
-- **CWE mapping** fills a weakness class from a curated keyword table when the scanner supplied none.
-- **NVD enrichment** streams the offline NVD feeds to fill an authoritative CVSS vector and back-fill a CWE for CVE-bearing findings.
-- **CWE→CVSS enrichment** derives a plausible CVSS vector from the CWE for vector-less findings, so the ML model receives real features instead of zeros.
-- **ML prioritisation** applies the Random Forest to predict a severity band from the CVSS sub-metrics and CWE.
-- **Confidence scoring** combines six reliability factors into a 0–100 score and a classification (≥70 *Confirmed*, 40–69 *Needs Manual Verification*, <40 *Not Confirmed*).
-- **PoC validation** (optional) runs non-destructive checks against in-scope targets; a confirmed result overrides the classification to *Confirmed*.
-- **Report generation** renders a PDF triage report.
+The ordering is not arbitrary; each stage depends on the outputs of the previous ones.
 
-### 4.5.3 Machine-Learning Component
+- **Normalisation** unifies severities, CWE identifiers, and field names into a common shape. It also cleans the data at this single chokepoint: it drops non-informative CWE placeholders (such as `CWE-0`, which some scanners emit to mean "no weakness assigned") so that they do not block later mapping, and it strips HTML markup from scanner descriptions so that the interface and report display readable text.
+- **De-duplication** computes a SHA-256 `group_hash` over a finding's identifying attributes and merges duplicates. When the same issue is reported by two different scanners, the merge raises the `scanner_count`, which the Confidence Engine later reads as cross-tool corroboration.
+- **CWE mapping** must run before enrichment so that a weakness class is available for the vector-inference step; it fills a CWE from a curated keyword table (fifty-eight patterns) when the scanner supplied none.
+- **NVD enrichment** streams the offline NVD feeds to fill an authoritative CVSS vector and to back-fill a CWE for any finding that carries a CVE but no weakness class.
+- **CWE→CVSS enrichment** must run after CWE mapping and NVD enrichment, because it only acts on findings that still lack a vector; it derives a plausible CVSS vector from the CWE so that the ML model receives real features rather than an all-zero vector (which had previously caused it to predict "Low" for every web finding).
+- **ML prioritisation** applies the Random Forest to predict a severity band from the CVSS sub-metrics and the CWE.
+- **Confidence scoring** combines six reliability factors into a 0–100 score and a classification (§4.5.4).
+- **PoC validation**, when requested, runs non-destructive checks against in-scope targets; a confirmed result overrides the classification to *Confirmed*.
+- **Report generation** renders the PDF triage report.
 
-The prioritiser is a **pure-NumPy Random Forest** (inference needs only NumPy; scikit-learn is training-only). It is trained on **108,495** real CVSS-v3 records from the NVD JSON feeds (2023–2025) and predicts the severity band from the eight CVSS sub-metrics plus the CWE — deliberately **excluding** the CVSS base score to avoid target leakage. On a held-out set of 21,697 real records it achieves **accuracy ≈ 0.997 and macro-F1 ≈ 0.994**. The genuinely novel analytic contribution, however, is the **Confidence Engine**, which estimates the likelihood that a finding is a *true positive* — a signal that CVSS alone cannot provide.
+### 4.5.3 The Machine-Learning Component
+
+The prioritiser is a **Random Forest implemented in pure NumPy**, so that inference at run time requires only NumPy and not the heavier scikit-learn stack (which is used only during training). It is trained on **108,495** real CVSS-v3 records drawn from the National Vulnerability Database JSON feeds for 2023–2025. Crucially, the model predicts the severity band from the **eight CVSS sub-metrics and the CWE only, deliberately excluding the CVSS base score**. This exclusion prevents *target leakage*: because the severity band is itself derived from the base score, including the score as an input would let the model trivially reproduce the answer and report a meaningless near-perfect accuracy. On a held-out set of 21,697 real records the model achieves an **accuracy of 0.9968 and a macro-averaged F1 of 0.9941**, with all misclassifications falling on adjacent severity bands rather than being gross errors.
+
+An honest limitation is stated for completeness: the CVSS base score is a deterministic function of its sub-metrics, so this task is close to deterministic and the model is effectively relearning the CVSS scoring formula. The high accuracy is therefore legitimate (there is no leakage) but reflects the near-deterministic nature of the task. The genuinely novel analytical contribution of the project is not this prioritiser but the Confidence Engine described next, which predicts something CVSS cannot express — the probability that a finding is a true positive.
+
+### 4.5.4 Confidence Scoring in Detail
+
+The Confidence Engine is the system's central innovation. It answers a different question from severity: **how likely is it that this finding is a genuine, actionable vulnerability rather than noise?** It computes a weighted score from six *reliability* factors, whose weights sum to 100: scanner agreement (25), severity consistency (20), CVE availability (15), exploit availability (15), PoC validation (15), and CWE mapping (10). The resulting 0–100 score is classified as **Confirmed (≥70)**, **Needs Manual Verification (40–69)**, or **Not Confirmed (<40)**; independently, a confirmed proof-of-concept check overrides the classification to *Confirmed*.
+
+Figure 4.13 shows the confidence panel from the interface for a confirmed SQL-injection finding, which makes the computation concrete.
+
+![Confidence-score breakdown panel](images/11-confidence-panel.png)
+
+**Figure 4.13: Confidence-Score Breakdown (Finding Detail)**
+
+Reading the panel, the finding scores **81.3/100** and is classified *Confirmed*. The rationale line explains that a proof-of-concept check actively confirmed the vulnerability, which forced the *Confirmed* classification and scaled the score into the 70–100 band. Below the rationale, each of the six factors is shown with its individual contribution and weight: the CWE-mapping factor contributes its full amount because the finding is classified as CWE-89; the PoC-validation factor contributes because one of the controlled checks confirmed; the scanner-agreement factor contributes a partial amount because only one scanner reported the issue; and the severity-consistency factor contributes because the machine-learning priority is close to the scanner's severity. The CVE- and exploit-availability factors contribute nothing here, because this web finding carries no CVE and no known public exploit. This per-factor transparency is exactly what allows an analyst to trust — or challenge — the automated verdict, and the same breakdown is embedded in the PDF report.
+
+On its curated evaluation benchmark, the Confidence Engine achieves a ROC-AUC of approximately 0.82, a precision of 1.0 for the *Confirmed* classification (it never wrongly confirmed a false positive in the benchmark), and roughly 81% suppression of false positives at the auto-dismiss threshold.
+
+### 4.5.5 Report Generation
+
+The final stage renders a professional PDF triage report suitable for handing to stakeholders. The report opens with a cover page carrying the report metadata and a severity summary (Figure 4.22), followed by an executive summary that narrates the scan and tabulates the classification and severity breakdowns (Figure 4.23), and then the per-finding detail including the confidence rationale. Because the report reads from the same normalised findings and confidence scores as the interface, the two views are always consistent.
 
 ---
 
 ## 4.6 Screenshot
 
-The following screenshots are real captures of the completed web application, driven against a triaged dataset produced by an Auto Scan of a local test target.
+This section presents annotated screenshots of the completed product with a justification for each. The screenshots were captured from the running web application driven against a triaged dataset produced by an Auto Scan of a local test target (OWASP Juice Shop), yielding sixteen findings of which four are *Confirmed*.
 
 ### 4.6.1 Login
 
 ![Login screen](images/01-login.png)
 
-*Justification.* The entry point demonstrates the JWT-secured authentication gate. All data routes are protected; unauthenticated access redirects here. The minimal, focused form reflects the design priority of getting an analyst to the workspace quickly.
+**Figure 4.14: Login Screen.** *Justification.* The entry point demonstrates the JWT-secured authentication gate. All data routes are protected, and unauthenticated access redirects here. The focused, minimal form reflects the design priority of getting an analyst into the workspace quickly.
 
 ### 4.6.2 Registration
 
 ![Registration screen](images/02-register.png)
 
-*Justification.* New analysts self-register; the API hashes the password and issues a token on success. Shown to document the full account-creation path referenced in UC1.
+**Figure 4.15: Registration Screen.** *Justification.* New analysts self-register; the API hashes the password and issues a token on success. It documents the complete account-creation path (UC1).
 
 ### 4.6.3 Dashboard
 
 ![Dashboard](images/03-dashboard.png)
 
-*Justification.* This is the analyst's landing view and the clearest demonstration of the system's value. The KPI cards quantify the workload (16 findings, of which only **4 are Confirmed** and **0 need review** — the rest auto-dismissed), the three charts characterise the dataset (severity mix, classification outcome, and cross-tool contribution), and the Top-10 table surfaces the highest-CVSS findings with their classification and CWE. Together they show the triage system converting raw scanner noise into a prioritised, actionable shortlist.
+**Figure 4.16: Dashboard.** *Justification.* This is the analyst's landing view and the clearest demonstration of the system's value. The key-performance-indicator cards quantify the workload (sixteen findings, of which only four are *Confirmed* and none need review — the remainder auto-dismissed); the three charts characterise the dataset; and the Top-10 table surfaces the highest-CVSS findings with their classification and CWE. Together they show the triage system converting raw scanner noise into a prioritised, actionable shortlist.
 
 ### 4.6.4 Upload Scans
 
 ![Upload screen](images/04-upload.png)
 
-*Justification.* Demonstrates the primary ingestion path (UC2): scanner-type selection, file submission, and the optional Exploit-Lookup / PoC toggles with an authorisation scope. This is where an analyst brings existing ZAP/Nuclei/Nessus output into the pipeline.
+**Figure 4.17: Upload Screen.** *Justification.* This is the primary ingestion path (UC2). It shows the scanner-type selector, the drag-and-drop zone, the two clearly-labelled Pipeline Options (Exploit Lookup and PoC Validation) with their safety notes, and the upload-history table with a per-row *Run Pipeline* action.
 
 ### 4.6.5 Auto Scan
 
 ![Auto Scan screen](images/05-autoscan.png)
 
-*Justification.* Shows the optional orchestration layer (UC3): a target field, scanner selection, and the explicit authorisation acknowledgement that gates all active scanning. This screen embodies the responsible-use design constraint that intrusive scanning is opt-in and confirmed.
+**Figure 4.18: Auto Scan Screen.** *Justification.* This shows the optional orchestration layer (UC3): a target field, scanner selection, and the explicit authorisation acknowledgement that gates all active scanning. The screen embodies the responsible-use design constraint that intrusive scanning must be deliberately opted into.
 
 ### 4.6.6 Findings
 
 ![Findings list](images/06-findings.png)
 
-*Justification.* The working list (UC5) where an analyst filters and sorts the full set of normalised findings. Each row's classification badge lets the analyst focus immediately on Confirmed items, demonstrating the practical false-positive reduction the project set out to achieve.
+**Figure 4.19: Findings List.** *Justification.* The working list (UC5), where an analyst filters and sorts the full set of normalised findings. Each row's classification badge lets the analyst focus immediately on *Confirmed* items, demonstrating the practical false-positive reduction the project set out to achieve.
 
 ### 4.6.7 Finding Detail
 
 ![Finding detail](images/07-finding-detail.png)
 
-*Justification.* The most important screen for the project's thesis. For the confirmed SQL Injection it shows the **confidence score (81.3/100)** with a full **six-factor breakdown** (each factor's contribution, weight, and a plain-language reason) and an overall rationale, alongside the **ML priority prediction** (Critical, 85%), the **CVSS v3 metrics**, the description/solution, and the **PoC validation evidence** that triggered the confirmation. This screen is the concrete realisation of the system's explainable, evidence-backed triage.
+**Figure 4.20: Finding Detail.** *Justification.* The most important screen for the project's thesis. For the confirmed SQL-injection finding it shows the confidence score with its full six-factor breakdown, the machine-learning priority prediction, the CVSS v3 metrics, the description and recommended solution, and the proof-of-concept evidence that triggered the confirmation. This is the concrete realisation of explainable, evidence-backed triage. (The confidence panel is examined in isolation in Figure 4.13.)
 
-### 4.6.8 Reports
+### 4.6.8 Reports List
 
 ![Reports list](images/08-reports.png)
 
-*Justification.* Completes the workflow (UC9): generated PDF triage reports are listed and downloadable, providing the deliverable an analyst hands to stakeholders.
+**Figure 4.21: Reports List.** *Justification.* Completes the workflow (UC9): generated PDF reports are listed and downloadable, providing the deliverable an analyst hands to stakeholders.
+
+### 4.6.9 Generated PDF Report
+
+![PDF report cover page](images/09-report-cover.png)
+
+**Figure 4.22: PDF Report — Cover and Severity Summary.** *Justification.* The report's cover page carries the report metadata (title, generation time, analyst, total findings) and an at-a-glance severity summary. It demonstrates that the system's output is a polished, stakeholder-ready document, not merely an on-screen view.
+
+![PDF report executive summary](images/10-report-summary.png)
+
+**Figure 4.23: PDF Report — Executive Summary.** *Justification.* The executive-summary page narrates the scan and tabulates the classification breakdown (four *Confirmed*, four *Not Confirmed*, eight informational/unclassified) and the severity breakdown. It shows that the triage verdicts and analytics presented in the interface are carried faithfully into the exported report.
 
 ---
 
 ## 4.7 Summary
 
-This chapter presented the design and completed implementation of VulnTriage using an object-oriented methodology. Section 4.2 established the layered architecture and modelled the system with a use case diagram, an activity diagram of the triage pipeline, sequence diagrams for the upload and Auto Scan flows, a class diagram, and a two-level Data Flow Diagram. Section 4.3 documented the nine-table relational schema as an ERD with per-table descriptions. Section 4.4 described the interface design — navigation, screen content, and the user-journey storyboard. Section 4.5 explained how the system executes across its three deployment modes, detailed the ordered engine pipeline, and summarised the machine-learning component. Section 4.6 presented annotated, real screenshots of the finished product with justification for each.
+This chapter presented the design and the completed implementation of VulnTriage using an object-oriented methodology. Section 4.2 set out the five design principles that govern the system and then modelled it with a layered system-architecture diagram, a use case diagram, an activity diagram of the triage pipeline, two sequence diagrams for the principal workflows, a class diagram separating domain models from engine services, and a two-level data flow diagram. Section 4.3 documented the nine-table relational schema as an entity-relationship diagram, described each table, and justified the normalisation and the single deliberate denormalisation. Section 4.4 described the interface-design philosophy, the navigation structure, each principal screen, and the user-journey storyboard. Section 4.5 explained how the system executes across its three deployment modes, detailed the ordered engine pipeline, described the machine-learning component and its anti-leakage design, and examined the Confidence Engine's scoring in depth using a real interface capture. Section 4.6 presented eleven annotated screenshots of the finished product — including the exported PDF report — with a justification for each.
 
-Together these show a fully realised system that ingests multi-scanner output and, through a normalisation–enrichment–prioritisation–confidence pipeline, produces explainable, prioritised, and confirmation-backed vulnerability findings. The next chapter evaluates the system's performance and effectiveness against the project's objectives.
+Taken together, these artefacts describe a fully realised system that ingests multi-scanner output and, through a normalisation–enrichment–prioritisation–confidence pipeline, produces explainable, prioritised, and confirmation-backed vulnerability findings. The following chapter evaluates the system's performance and effectiveness against the objectives established for the project.
