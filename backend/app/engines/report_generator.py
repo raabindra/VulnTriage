@@ -289,7 +289,8 @@ class ReportGenerator:
         # Title banner
         banner = Table(
             [[Paragraph("VulnTriage",
-                        ParagraphStyle("bh", fontSize=28, fontName="Helvetica-Bold",
+                        ParagraphStyle("bh", fontSize=28, leading=32,
+                                       fontName="Helvetica-Bold",
                                        textColor=colors.white, alignment=TA_CENTER))]],
             colWidths=[170 * mm],
         )
@@ -337,7 +338,8 @@ class ReportGenerator:
         ]
         count_row = [
             Paragraph(str(sev.get(k, 0)),
-                      ParagraphStyle(f"sc{i}", fontSize=30, fontName="Helvetica-Bold",
+                      ParagraphStyle(f"sc{i}", fontSize=30, leading=34,
+                                     fontName="Helvetica-Bold",
                                      alignment=TA_CENTER, textColor=colors.HexColor(sev_hex[i])))
             for i, k in enumerate(sev_keys)
         ]
