@@ -478,30 +478,34 @@ class ReportGenerator:
             ("LINEABOVE",    (0, 0), (-1,  0), 1, colors.HexColor(hex_c)),
         ]))
 
-        url_str = (f.url[:90] + "…") if f.url and len(f.url) > 90 else (f.url or "—")
+        url_str = (f.url[:120] + "…") if f.url and len(f.url) > 120 else (f.url or "—")
         scanner_str = f"{f.scanner_count} ({', '.join(f.scanner_sources or [])})"
 
+        # Cells are Paragraphs (not raw strings) so long values — URLs, long
+        # classification labels — wrap within their column instead of spilling
+        # into the neighbouring cell.
+        _lbl = ParagraphStyle("metalbl", parent=s["small"],
+                              fontName="Helvetica-Bold", textColor=_NAVY)
+        def _L(t): return Paragraph(str(t), _lbl)
+        def _V(t): return Paragraph(_esc(str(t)), s["small"])
+
         meta = Table([
-            ["CVE",            f.cve_id or "—",     "CWE",         f.cwe_id or "—"],
-            ["CVSS Score",     f"{f.cvss_score:.1f}" if f.cvss_score else "—",
-             "Confidence",     f"{cs.score:.0f}/100" if cs else "—"],
-            ["URL",            url_str,
-             "ML Priority",    ml.predicted_priority if ml else "—"],
-            ["Classification", _clabel(f.classification),
-             "Scanners",       scanner_str],
+            [_L("CVE"),            _V(f.cve_id or "—"),  _L("CWE"),         _V(f.cwe_id or "—")],
+            [_L("CVSS Score"),     _V(f"{f.cvss_score:.1f}" if f.cvss_score else "—"),
+             _L("Confidence"),     _V(f"{cs.score:.0f}/100" if cs else "—")],
+            [_L("URL"),            _V(url_str),
+             _L("ML Priority"),    _V(ml.predicted_priority if ml else "—")],
+            [_L("Classification"), _V(_clabel(f.classification)),
+             _L("Scanners"),       _V(scanner_str)],
         ], colWidths=[25 * mm, 57 * mm, 25 * mm, 63 * mm])
         meta.setStyle(TableStyle([
-            ("FONTSIZE",      (0, 0), (-1, -1), 8),
-            ("FONTNAME",      (0, 0), (0, -1),  "Helvetica-Bold"),
-            ("FONTNAME",      (2, 0), (2, -1),  "Helvetica-Bold"),
-            ("TEXTCOLOR",     (0, 0), (0, -1),  _NAVY),
-            ("TEXTCOLOR",     (2, 0), (2, -1),  _NAVY),
             ("GRID",          (0, 0), (-1, -1), 0.25, _LGREY),
             ("ROWBACKGROUNDS",(0, 0), (-1, -1), [colors.white, _FAINT]),
             ("LEFTPADDING",   (0, 0), (-1, -1), 5),
             ("RIGHTPADDING",  (0, 0), (-1, -1), 5),
             ("TOPPADDING",    (0, 0), (-1, -1), 3),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
         ]))
 
         parts = [title_t, meta]
@@ -581,18 +585,20 @@ class ReportGenerator:
         for i, f in enumerate(findings, 1):
             cs = f.confidence_score
             ml = f.ml_prediction
-            title = (f.title[:55] + "…") if len(f.title) > 55 else f.title
+            title = (f.title[:70] + "…") if len(f.title) > 70 else f.title
+            # Text columns are Paragraphs so they wrap; numeric columns stay
+            # plain strings so the centre alignment below still applies.
             rows.append([
                 str(i),
-                title,
-                f.cve_id or "—",
+                Paragraph(_esc(title), s["small"]),
+                Paragraph(_esc(f.cve_id or "—"), s["small"]),
                 f"{f.cvss_score:.1f}" if f.cvss_score else "—",
                 f"{cs.score:.0f}" if cs else "—",
-                _clabel(f.classification) if f.classification else "—",
-                ml.predicted_priority if ml else "—",
+                Paragraph(_esc(_clabel(f.classification) if f.classification else "—"), s["small"]),
+                Paragraph(_esc(ml.predicted_priority if ml else "—"), s["small"]),
             ])
 
-        t = Table(rows, colWidths=[8*mm, 62*mm, 22*mm, 13*mm, 18*mm, 32*mm, 15*mm],
+        t = Table(rows, colWidths=[8*mm, 58*mm, 20*mm, 13*mm, 18*mm, 34*mm, 19*mm],
                   repeatRows=1)
         t.setStyle(TableStyle([
             ("FONTSIZE",      (0, 0), (-1, -1), 8),
@@ -605,6 +611,7 @@ class ReportGenerator:
             ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
             ("TOPPADDING",    (0, 0), (-1, -1), 4),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
             ("ALIGN",         (0, 0), (0, -1),  "CENTER"),
             ("ALIGN",         (3, 0), (4, -1),  "CENTER"),
         ]))
