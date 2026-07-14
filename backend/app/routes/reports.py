@@ -29,6 +29,9 @@ def generate_report():
 
     upload_ids  = data.get("upload_ids") or []
     report_type = data.get("report_type", "pdf")
+    # Include the optional Claude analysis when enabled (default on); it is a
+    # no-op unless ANTHROPIC_API_KEY is configured, so this is always safe.
+    ai_summary  = bool(data.get("ai_summary", True))
     title = data.get(
         "title",
         f"Vulnerability Triage Report — {datetime.utcnow().strftime('%d %b %Y %H:%M')}",
@@ -47,7 +50,7 @@ def generate_report():
     from app.engines.report_generator import ReportGenerator
     generator = ReportGenerator()
     try:
-        generator.generate(report.id)
+        generator.generate(report.id, ai_summary=ai_summary)
     except Exception as exc:
         return jsonify({"error": f"Report generation failed: {exc}"}), 500
 

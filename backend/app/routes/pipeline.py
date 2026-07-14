@@ -113,7 +113,7 @@ def run_pipeline(upload_id: int):
     db.session.add(rpt)
     db.session.commit()
     try:
-        ReportGenerator().generate(rpt.id)
+        ReportGenerator().generate(rpt.id, ai_summary=True)
         results["report_id"] = rpt.id
     except Exception as exc:
         results["report_warning"] = str(exc)

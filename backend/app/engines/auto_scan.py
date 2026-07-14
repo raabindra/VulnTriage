@@ -181,7 +181,7 @@ class AutoScanOrchestrator:
         db.session.add(rpt)
         db.session.commit()
         try:
-            ReportGenerator().generate(rpt.id)
+            ReportGenerator().generate(rpt.id, ai_summary=True)
             return rpt.id
         except Exception:
             return None
