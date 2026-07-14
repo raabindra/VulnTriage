@@ -67,3 +67,25 @@ def test_ai_section_renders_flowables():
     styles = ReportGenerator._make_styles()
     story = ReportGenerator()._ai_section(_AI_JSON, styles)
     assert isinstance(story, list) and len(story) > 3
+
+
+# ── Gemini provider ─────────────────────────────────────────────────────────
+
+def test_gemini_provider_and_default_model():
+    e = AiSummaryEngine(api_key="AIza-test", provider="gemini")
+    assert e.enabled is True
+    assert e.provider == "gemini"
+    assert e.model == "gemini-flash-latest"
+
+
+def test_summarise_gemini_parses_response():
+    e = AiSummaryEngine(api_key="AIza-test", provider="gemini")
+    resp = MagicMock(status_code=200)
+    resp.json.return_value = {
+        "candidates": [{"content": {"parts": [{"text": json.dumps(_AI_JSON)}]}}]
+    }
+    with patch("requests.post", return_value=resp) as post:
+        out = e.summarise([_finding()])
+    assert out == _AI_JSON
+    # Hit the Gemini REST endpoint, not the Anthropic SDK.
+    assert "generativelanguage.googleapis.com" in post.call_args[0][0]
