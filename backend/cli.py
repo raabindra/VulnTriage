@@ -87,6 +87,8 @@ def cli():
                    "When set, out-of-scope hosts are skipped. Strongly recommended.")
 @click.option("--exploits", "search_exploits", is_flag=True, default=False,
               help="Look up public exploits for each finding via searchsploit (Exploit-DB).")
+@click.option("--ai-summary", "ai_summary", is_flag=True, default=False,
+              help="Add a Claude-generated AI analysis section to the report (needs ANTHROPIC_API_KEY).")
 @click.option("-o", "--output", type=click.Path(dir_okay=False),
               help="Where to write the PDF report (default: leave it in reports_output/).")
 @click.option("--db", "db_url",
@@ -94,7 +96,7 @@ def cli():
 @click.option("--top", default=10, show_default=True,
               help="How many findings to list in the terminal summary.")
 @click.option("-q", "--quiet", is_flag=True, help="Suppress per-step progress output.")
-def scan(scan_file, scanner, run_poc, poc_scope, search_exploits, output, db_url, top, quiet):
+def scan(scan_file, scanner, run_poc, poc_scope, search_exploits, ai_summary, output, db_url, top, quiet):
     """Run the full triage pipeline on a scanner output FILE and write a PDF report."""
     import shutil
     from datetime import datetime
@@ -261,7 +263,7 @@ def scan(scan_file, scanner, run_poc, poc_scope, search_exploits, output, db_url
         )
         db.session.add(rpt)
         db.session.commit()
-        pdf_path = ReportGenerator().generate(rpt.id)
+        pdf_path = ReportGenerator().generate(rpt.id, ai_summary=ai_summary)
 
         if output:
             shutil.copyfile(pdf_path, output)

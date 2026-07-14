@@ -44,6 +44,8 @@ Confidence: 6-factor weighted score (0–100). ≥70 Confirmed, 40–69 Needs Ma
 - **Authorisation scope (responsible-tooling guard):** `PocValidator(scope=...)` / `--scope` / `POC_SCOPE` env (comma-separated hosts). When set, probes to out-of-scope hosts are `skipped` with no network call (matches host or subdomain). **Empty scope = unrestricted (legacy)** — operators should set it. Payloads are read-only/time-based only (no writes/drops).
 - **Exploit lookup:** `--exploits` / `search_exploits` runs `searchsploit -j` (Exploit-DB) per finding — exact `--cve` lookup, else title keywords — sets `exploit_available` (feeds the confidence factor) and appends `EDB-<id>` refs to `finding.reference`. Degrades to a no-op if `searchsploit` is absent.
 
+- **AI-Assisted Analysis (optional, `engines/ai_summary.py`):** a Claude-backed summary added to the PDF report — executive risk overview, per-finding plain-language risk + concrete remediation, and prioritised actions. Uses the official `anthropic` SDK, one `messages.create` call per report with structured JSON output. **Gated behind `ANTHROPIC_API_KEY`** (default model `claude-haiku-4-5`, override via `AI_SUMMARY_MODEL`); with no key it is a no-op and the offline pipeline is unaffected. Enable with `cli.py scan … --ai-summary` (threads `ai_summary=True` into `ReportGenerator.generate`, rendered by `_ai_section`). Scanner text is passed as data, never instructions; failures degrade to no section.
+
 A ready-to-use sample report is at `samples/zap-sample.xml`.
 
 ## Local dev (without Docker)
