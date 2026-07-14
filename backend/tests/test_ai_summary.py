@@ -37,7 +37,10 @@ def _mock_client():
     return client
 
 
-def test_disabled_without_key():
+def test_disabled_without_key(monkeypatch):
+    # Isolate from any provider key that .env / the environment may set.
+    for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(k, raising=False)
     e = AiSummaryEngine(api_key="")
     assert e.enabled is False
     assert e.summarise([_finding()]) is None

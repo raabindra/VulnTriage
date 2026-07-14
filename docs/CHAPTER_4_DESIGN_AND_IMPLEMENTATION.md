@@ -766,13 +766,15 @@ The optional PoC validator provides *active* confirmation by sending non-destruc
 
 #### 4.5.2.10 Report Generation
 
-The final stage renders a professional PDF triage report. Figure 4.26 shows the generation method.
+The final stage renders a professional PDF triage report and can optionally enrich it with a large-language-model analysis. Figure 4.26 shows the generation method.
 
 ![Report generation](images/code-report.png)
 
 **Figure 4.26: Report Generation (report_generator.py)**
 
 `generate` loads the report record and its findings, marks the report as *generating*, builds the PDF document with the ReportLab library (delegating the layout to `_build_pdf`), and finally records the output file path and marks the report *completed*. Because the report reads from the same normalised findings and confidence scores as the interface, the on-screen and exported views are always consistent.
+
+**Optional AI-Assisted Analysis.** The `generate` method accepts an `ai_summary` flag. When it is set — and an API key is configured — the report generator first calls an optional AI engine (`engines/ai_summary.py`) over the findings and inserts an additional **"AI-Assisted Analysis"** page into the PDF, containing an executive risk overview, a per-finding plain-language explanation of the risk together with concrete remediation, and a prioritised list of actions. This is the point at which the project's "AI-Assisted" remit is realised end-to-end: a large language model turns the structured triage data into an analyst-ready narrative. The engine is **provider-agnostic** — it uses Google Gemini or Anthropic Claude depending on which API key is present (`GEMINI_API_KEY` or `ANTHROPIC_API_KEY`) — and makes a single structured-output request per report. Like the NVD enrichment and exploit-lookup features, it is **gated behind an API key**: with no key it is a silent no-op and the offline report is produced exactly as before, and any API error degrades gracefully to a report without the section. Scanner-supplied text is passed to the model strictly as data, never as instructions, so the feature does not widen the system's trust boundary.
 
 ### 4.5.3 Auto-Scan Orchestration
 

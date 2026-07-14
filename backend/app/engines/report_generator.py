@@ -137,8 +137,8 @@ class ReportGenerator:
         """
         Build the PDF for the given Report record.
         Updates report.status and report.file_path; returns the absolute file path.
-        When ai_summary is True (and ANTHROPIC_API_KEY is configured) an optional
-        Claude-generated analysis section is included.
+        When ai_summary is True (and an AI provider key is configured — Gemini or
+        Claude) an optional AI-generated analysis section is included.
         """
         report = db.session.get(Report, report_id)
         if report is None:
