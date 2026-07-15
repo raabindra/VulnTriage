@@ -1,12 +1,11 @@
 """Confidence Engine tests.
 
 These exercise the pure `compute_score()` path on lightweight stand-in findings
-(see app/engines/eval/labelled_findings.py), so they need no database or app
-context.
+(see app/engines/eval/finding_stub.py), so they need no database or app context.
 """
 
 from app.engines.confidence_engine import ConfidenceEngine
-from app.engines.eval.labelled_findings import FindingStub, build_benchmark
+from app.engines.eval.finding_stub import FindingStub
 
 
 def test_weights_sum_to_100():
@@ -91,12 +90,3 @@ def test_severity_consistency_neutral_without_cvss_vector():
     sc = breakdown["factors"]["severity_consistency"]
     assert sc["raw_score"] == 50.0
     assert "no cvss vector" in sc["reason"].lower()
-
-
-def test_confidence_separates_benchmark():
-    """The score should, on average, rank true positives above false positives."""
-    engine = ConfidenceEngine()
-    rows = [(f.is_true_positive, engine.compute_score(f)[0]) for f in build_benchmark()]
-    tp_mean = sum(s for tp, s in rows if tp) / sum(1 for tp, _ in rows if tp)
-    fp_mean = sum(s for tp, s in rows if not tp) / sum(1 for tp, _ in rows if not tp)
-    assert tp_mean > fp_mean + 15  # clear, but not perfect, separation

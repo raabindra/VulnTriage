@@ -1,11 +1,10 @@
 """
 Real-target Confidence Engine evaluation.
 
-Unlike scripts/evaluate_confidence.py (which uses a curated synthetic benchmark
-with balanced TP/FP labels), this harness reports the Confidence Engine's
-behaviour on a REAL scan stored in a VulnTriage database — the actual confidence
-scores it assigned, the classification bands, and the PoC validator's objective
-active-confirmation results.
+This harness reports the Confidence Engine's behaviour on a REAL scan stored in
+a VulnTriage database — the actual confidence scores it assigned, the
+classification bands, and the PoC validator's objective active-confirmation
+results.
 
 Ground-truth anchors used here are objective, not hand-labelled:
   • PoC active confirmation — the validator probed the live app (e.g. a SQLi
@@ -16,8 +15,7 @@ Ground-truth anchors used here are objective, not hand-labelled:
 Note (transparency): poc_validation is one of the engine's six scoring factors,
 so this measures the end-to-end triage outcome on a real target, i.e. how well
 the engine *prioritises* genuine findings above informational noise — not an
-independent predictor. The synthetic benchmark isolates discriminative power
-with a balanced label set.
+independent predictor.
 
 Run:
   cd backend && python -m scripts.evaluate_realscan <path-to-scan.db>

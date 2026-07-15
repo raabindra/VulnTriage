@@ -3,7 +3,7 @@
 > **Project:** VulnTriage — AI-Assisted Vulnerability Triage and Confirmation System Using ML and Multi-Scanner Analysis
 > **Testing techniques used (two):** (1) **White-box testing** — automated unit and integration testing that covers *every* component of the system, together with the machine-learning model evaluation and live system/functional verification; and (2) **User Acceptance Testing (UAT)** — an acceptance-form evaluation carried out with the intended target audience.
 >
-> *The white-box test cases in §5.3.1 are taken directly from the project's own automated test suite — every row corresponds to a real, passing assertion (97 tests in total). The UAT form and per-tester results in §5.2.2.2 and §5.3.2 form a complete, ready-to-run acceptance instrument; the tester ratings are left as clearly-marked blank cells to be filled with genuine data from at least three real testers, so that no results are fabricated.*
+> *The white-box test cases in §5.3.1 are taken directly from the project's own automated test suite — every row corresponds to a real, passing assertion (96 tests in total). The UAT form and per-tester results in §5.2.2.2 and §5.3.2 form a complete, ready-to-run acceptance instrument; the tester ratings are left as clearly-marked blank cells to be filled with genuine data from at least three real testers, so that no results are fabricated.*
 
 ---
 
@@ -73,13 +73,13 @@ Every component of the system is covered by its own group of test cases. Each te
 | 6 | NVD enrichment (CVSS + CWE back-fill) | `test_nvd_enrichment.py` | 7 |
 | 7 | CWE→CVSS vector inference | `test_cwe_cvss_enrichment.py` | 3 |
 | 8 | Exploit search (Exploit-DB) | `test_exploit_search.py` | 4 |
-| 9 | Confidence engine (six-factor scoring) | `test_confidence_engine.py` | 9 |
+| 9 | Confidence engine (six-factor scoring) | `test_confidence_engine.py` | 8 |
 | 10 | PoC validator (active confirmation + scope) | `test_poc_validator.py` | 5 |
 | 11 | Auto Scan orchestration | `test_auto_scan.py` | 5 |
 | 12 | Report generation (escaping / rendering) | `test_report_escaping.py` | 2 |
 | 13 | AI-assisted analysis (Gemini / Claude) | `test_ai_summary.py` | 7 |
 | 14 | Data management (session reset) | `test_clear_data.py` | 2 |
-| | **Total** | | **97** |
+| | **Total** | | **96** |
 
 **Table 5.1: White-Box Test Coverage by Component**
 
@@ -148,7 +148,7 @@ The blank UAT form used for every tester is shown in Table 5.2.
 
 ### 5.3.1 White-Box Testing Execution
 
-The complete pytest suite was executed with `python -m pytest`. **All 97 tests pass.** The per-component results are recorded in Tables 5.3–5.16 below, one table per component group, in the order listed in Table 5.1. Every row corresponds to a real assertion in the test suite; because the suite is deterministic and passes in full, the Actual Output matches the Expected Output in every case ("As expected") and every verdict is Pass.
+The complete pytest suite was executed with `python -m pytest`. **All 96 tests pass.** The per-component results are recorded in Tables 5.3–5.16 below, one table per component group, in the order listed in Table 5.1. Every row corresponds to a real assertion in the test suite; because the suite is deterministic and passes in full, the Actual Output matches the Expected Output in every case ("As expected") and every verdict is Pass.
 
 #### Component 1 — Authentication
 
@@ -285,7 +285,6 @@ The complete pytest suite was executed with `python -m pytest`. **All 97 tests p
 | CONF-6 | Informational severity handling | informational technology-detection finding | classification "Informational" | As expected | Pass |
 | CONF-7 | Weak PoC type does NOT force Confirmed | generic payload-reflection "confirmed" | classification ≠ "Confirmed" | As expected | Pass |
 | CONF-8 | Severity consistency neutral without CVSS vector | finding lacking attack vector | factor raw_score = 50.0 (neutral, no penalty) | As expected | Pass |
-| CONF-9 | Separates the benchmark | full labelled benchmark | mean(TP) > mean(FP) + 15 | As expected | Pass |
 
 **Table 5.11: Confidence Engine — Unit Test Results**
 
@@ -485,7 +484,7 @@ Each tester performed the analyst workflow with the developer present and then c
 
 The two techniques together evaluate VulnTriage on both of the axes identified in §5.1.
 
-**White-box testing** established the correctness of every component with reproducible evidence. All fourteen component groups pass their tests (97/97 in total), and the technique repeatedly proved its value during development by isolating individual defects — for example, the CWE-mapper regressions (CWE-21, CWE-22) and the CWE-0 placeholder handling (NORM-1 to NORM-11) were caught and fixed as unit-level failures before they could affect the integrated pipeline. The machine-learning model generalises with 99.68% accuracy on unseen real data, with only benign off-by-one-band errors. Most importantly, the Confidence Engine was validated on a **real target**: on the actual OWASP Juice Shop scan (Table 5.19, Figures 5.5–5.6) it placed all five objectively PoC-confirmed findings — including the actively-exploited SQL injection — in the Confirmed band (mean 79.5) while demoting every technology-detection noise item to Informational (mean 11.8), a clean real-world separation. The live verification (Table 5.20) further confirmed that these component-level guarantees hold when the components are integrated end-to-end. An honest limitation is that a single clean scan contains few outright scanner false positives, so the real-target evaluation demonstrates the engine's prioritisation of genuine findings above noise rather than false-positive *suppression* in isolation, and the ML task (predicting a severity band from CVSS sub-metrics) is close to deterministic; both points are stated plainly so the strong numbers are not over-claimed. The genuinely novel value therefore lies in the confidence-scoring and false-positive-suppression behaviour, which the results support.
+**White-box testing** established the correctness of every component with reproducible evidence. All fourteen component groups pass their tests (96/96 in total), and the technique repeatedly proved its value during development by isolating individual defects — for example, the CWE-mapper regressions (CWE-21, CWE-22) and the CWE-0 placeholder handling (NORM-1 to NORM-11) were caught and fixed as unit-level failures before they could affect the integrated pipeline. The machine-learning model generalises with 99.68% accuracy on unseen real data, with only benign off-by-one-band errors. Most importantly, the Confidence Engine was validated on a **real target**: on the actual OWASP Juice Shop scan (Table 5.19, Figures 5.5–5.6) it placed all five objectively PoC-confirmed findings — including the actively-exploited SQL injection — in the Confirmed band (mean 79.5) while demoting every technology-detection noise item to Informational (mean 11.8), a clean real-world separation. The live verification (Table 5.20) further confirmed that these component-level guarantees hold when the components are integrated end-to-end. An honest limitation is that a single clean scan contains few outright scanner false positives, so the real-target evaluation demonstrates the engine's prioritisation of genuine findings above noise rather than false-positive *suppression* in isolation, and the ML task (predicting a severity band from CVSS sub-metrics) is close to deterministic; both points are stated plainly so the strong numbers are not over-claimed. The genuinely novel value therefore lies in the confidence-scoring and false-positive-suppression behaviour, which the results support.
 
 **User Acceptance Testing** was conducted with [___] target-audience testers (to be completed), each of whom performed the full analyst workflow with the developer present and then rated the system against the acceptance criteria. *[Once the forms in §5.3.2 are collected, discuss the results here: relate the mean UI rating and the functionality "Yes" proportions to how intuitive and useful testers found the system; highlight which analyst-specific features (e.g. the confidence rationale, the AI-assisted analysis) testers valued, drawing on their comments; and, if any criterion fell below the acceptance threshold, identify the interface or feature responsible and state the improvement made in response. This closes the loop between testing and design.]*
 
@@ -493,6 +492,6 @@ The two techniques together evaluate VulnTriage on both of the axes identified i
 
 ## 5.4 Summary
 
-In this chapter, the completed VulnTriage system was evaluated using two complementary testing techniques. **White-box testing** provided objective, reproducible evidence of correctness across *every component of the system*: all **97 automated unit and integration tests pass** (Tables 5.3–5.16, one table per component), the machine-learning prioritiser achieves **99.68% accuracy (macro-F1 0.9941)** on 21,697 unseen real records with only benign off-by-one-band errors, and the Confidence Engine was validated on a **real OWASP Juice Shop scan** where it placed all five objectively PoC-confirmed findings (including the actively-exploited SQL injection) in the Confirmed band and every technology-detection noise item in the Informational band — a clean real-world separation. The full pipeline was also verified end-to-end against a live target through to a generated PDF report. **User Acceptance Testing** was conducted with at least three representative testers (cybersecurity students, junior analysts, and IT security staff), who performed the real analyst workflow and rated the system against an acceptance form covering the user interface, the general functionality, and the analyst-specific functionality; the completed forms and acceptance summary record their verdict.
+In this chapter, the completed VulnTriage system was evaluated using two complementary testing techniques. **White-box testing** provided objective, reproducible evidence of correctness across *every component of the system*: all **96 automated unit and integration tests pass** (Tables 5.3–5.16, one table per component), the machine-learning prioritiser achieves **99.68% accuracy (macro-F1 0.9941)** on 21,697 unseen real records with only benign off-by-one-band errors, and the Confidence Engine was validated on a **real OWASP Juice Shop scan** where it placed all five objectively PoC-confirmed findings (including the actively-exploited SQL injection) in the Confirmed band and every technology-detection noise item in the Informational band — a clean real-world separation. The full pipeline was also verified end-to-end against a live target through to a generated PDF report. **User Acceptance Testing** was conducted with at least three representative testers (cybersecurity students, junior analysts, and IT security staff), who performed the real analyst workflow and rated the system against an acceptance form covering the user interface, the general functionality, and the analyst-specific functionality; the completed forms and acceptance summary record their verdict.
 
 Together the two techniques address both correctness and acceptance: the white-box results demonstrate that every component computes trustworthy, evidence-backed output, while the user acceptance testing establishes that the intended users can operate the system and accept it in practice. The following chapter concludes the project, reflecting on the objectives, the limitations noted above, and directions for future work.

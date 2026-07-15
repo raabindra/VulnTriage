@@ -32,8 +32,8 @@ Factors and weight rationale (weights sum to 100)
                             the finding is well-formed rather than spurious.
 
 These weights are a documented, defensible default. They are exposed via the
-`WEIGHTS` dict and the engine is weight-agnostic, so a sensitivity analysis can
-sweep them without code changes (see scripts/evaluate_confidence.py).
+`WEIGHTS` dict and the engine is weight-agnostic, so they can be tuned without
+code changes.
 
 Classification thresholds:
   70-100  ->  Confirmed
