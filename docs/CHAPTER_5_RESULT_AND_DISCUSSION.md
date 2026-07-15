@@ -345,7 +345,13 @@ The complete pytest suite was executed with `python -m pytest`. **All 97 tests p
 
 **Table 5.16: Data Management — Unit Test Results**
 
-**Machine-learning model evaluation (real).** In addition to the component unit tests, the Random Forest prioritiser was evaluated on **21,697 real, held-out NVD records** (a stratified split, seed 42, never seen during training on 86,798 rows). It achieved an **accuracy of 0.9968** and a **macro-averaged F1 of 0.9941**. Table 5.17 gives the per-class report and Table 5.18 the confusion matrix. Only 70 of 21,697 predictions were wrong, and — importantly — every error is a single severity band off (e.g. a Critical predicted as High), never a gross misclassification such as Critical-to-Low.
+**Machine-learning model evaluation (real).** In addition to the component unit tests, the Random Forest prioritiser was evaluated on **21,697 real, held-out NVD records** (a stratified split, seed 42, never seen during training on 86,798 rows). It achieved an **accuracy of 0.9968** and a **macro-averaged F1 of 0.9941**. These figures are produced directly by the project's evaluation script (`backend/scripts/show_model_results.py`), which reads the saved model metadata; its output is shown in Figure 5.2 as evidence that the numbers reported in Tables 5.17 and 5.18 come from a genuine evaluation run. Only 70 of 21,697 predictions were wrong, and — importantly — every error is a single severity band off (e.g. a Critical predicted as High), never a gross misclassification such as Critical-to-Low.
+
+![Figure 5.2: Model-evaluation script output (real run)](images/ml-eval-terminal.png)
+
+**Figure 5.2: Evaluation Script Output — `show_model_results.py` (accuracy, macro-F1, per-class report, confusion matrix, and feature importances from the real held-out run)**
+
+Table 5.17 gives the per-class report and Figure 5.3 visualises it; Table 5.18 gives the confusion matrix and Figure 5.4 visualises it as a heatmap.
 
 | Class | Precision | Recall | F1-score | Support |
 |-------|:---------:|:------:|:--------:|:-------:|
@@ -356,6 +362,10 @@ The complete pytest suite was executed with `python -m pytest`. **All 97 tests p
 
 **Table 5.17: Random Forest Per-Class Evaluation (held-out NVD data)**
 
+![Figure 5.3: Per-class precision, recall, and F1](images/ml-per-class.png)
+
+**Figure 5.3: Random Forest Per-Class Precision / Recall / F1 (held-out NVD data)**
+
 | Actual ↓ / Predicted → | Low | Medium | High | Critical |
 |------------------------|:---:|:------:|:----:|:--------:|
 | **Low** | 956 | 20 | 0 | 0 |
@@ -364,6 +374,10 @@ The complete pytest suite was executed with `python -m pytest`. **All 97 tests p
 | **Critical** | 0 | 0 | 22 | 2,118 |
 
 **Table 5.18: Random Forest Confusion Matrix (21,697 held-out records)**
+
+![Figure 5.4: Confusion matrix heatmap](images/ml-confusion-matrix.png)
+
+**Figure 5.4: Random Forest Confusion Matrix Heatmap — the strong diagonal shows nearly all predictions are correct; the few off-diagonal counts are all one severity band away**
 
 **Confidence Engine benchmark (real).** The Confidence Engine was additionally evaluated on a curated benchmark of 32 labelled scenarios (16 true positives, 16 false positives) using the `evaluate_confidence` harness. It achieved a **ROC-AUC of ≈ 0.82**, a **precision of 1.0 for the "Confirmed" classification** (it never wrongly confirmed a false positive), and it **auto-dismissed ≈ 81% of the false positives while retaining 75% of the true positives** for review.
 
