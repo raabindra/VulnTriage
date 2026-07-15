@@ -379,7 +379,19 @@ Table 5.17 gives the per-class report and Figure 5.3 visualises it; Table 5.18 g
 
 **Figure 5.4: Random Forest Confusion Matrix Heatmap — the strong diagonal shows nearly all predictions are correct; the few off-diagonal counts are all one severity band away**
 
-**Confidence Engine benchmark (real).** The Confidence Engine was additionally evaluated on a curated benchmark of 32 labelled scenarios (16 true positives, 16 false positives) using the `evaluate_confidence` harness. It achieved a **ROC-AUC of ≈ 0.82**, a **precision of 1.0 for the "Confirmed" classification** (it never wrongly confirmed a false positive), and it **auto-dismissed ≈ 81% of the false positives while retaining 75% of the true positives** for review.
+**Confidence Engine benchmark (real).** The Confidence Engine was additionally evaluated on a curated benchmark of 32 labelled scenarios (16 true positives, 16 false positives) using the `backend/scripts/evaluate_confidence.py` harness. Its console report is shown in Figure 5.5 as evidence that the figures below come from a genuine evaluation run. The engine achieved a **ROC-AUC of 0.822** (Figure 5.6), driven by a clear separation between the true-positive and false-positive scores — a mean of **61.6** for true positives versus **32.0** for false positives (Figure 5.7). Treated as a true-positive detector, the "Confirmed" band (score ≥ 70) achieves a **precision of 1.0** — it never wrongly confirmed a false positive — and auto-dismissing the "Not Confirmed" band (score < 40) **suppresses 81.2% of the false positives while retaining 75.0% of the true positives** for review, reducing the analyst's workload by 53.1%. This demonstrates the engine's core purpose: suppressing scanner noise without discarding real vulnerabilities. (As stated in the harness header, this is a *curated synthetic* benchmark, not field-validated data.)
+
+![Figure 5.5: Confidence-engine evaluation script output (real run)](images/conf-eval-terminal.png)
+
+**Figure 5.5: Evaluation Script Output — `evaluate_confidence.py` (ROC-AUC, score separation, 'Confirmed' precision, operational triage, threshold sweep, and weight-sensitivity analysis from the real benchmark run)**
+
+![Figure 5.6: Confidence-engine ROC curve](images/conf-roc.png)
+
+**Figure 5.6: Confidence Engine ROC Curve (AUC = 0.822) — the steep initial rise reflects the perfect-precision 'Confirmed' region at a false-positive rate of zero**
+
+![Figure 5.7: Confidence score separation between true and false positives](images/conf-separation.png)
+
+**Figure 5.7: Confidence Score Separation — true positives (mean 61.6) sit clearly above false positives (mean 32.0), with the three classification bands (Not Confirmed < 40, Needs Verification 40–69, Confirmed ≥ 70) shaded**
 
 **Live functional / system verification (real).** Beyond the unit level, the entire pipeline was verified end-to-end against a live, deliberately-vulnerable target (a local OWASP Juice Shop). Table 5.19 records the principal functional/system test cases and their outcomes.
 
