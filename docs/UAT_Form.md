@@ -2,80 +2,45 @@
 
 **VulnTriage — AI-Assisted Vulnerability Triage and Confirmation System**
 
-> **Purpose.** Thank you for helping evaluate VulnTriage. Please complete the six tasks in Section B using the system, then rate your experience in Sections C–F and add any comments in Section G. There are no right or wrong answers — your honest opinion is what matters.
+> **Instructions.** Thank you for helping evaluate VulnTriage. First, please use the system to (1) register & log in, (2) upload a scanner report and run the triage, (3) read the dashboard, (4) open a Confirmed finding and its rationale, (5) run an authorised Auto Scan, and (6) generate the PDF report. Then rate each statement below by placing a tick (✓) in the column that best matches your opinion. There are no right or wrong answers.
 >
-> **Authorisation & scope.** Any scanning during this test is performed **only** against the provided, deliberately-vulnerable practice target (e.g. a local OWASP Juice Shop). Do not point the system at any system you are not explicitly authorised to test.
+> **Authorisation & scope.** Any scanning is performed **only** against the provided, deliberately-vulnerable practice target (e.g. a local OWASP Juice Shop).
 
----
+**Name:** ________________________  **Role:** ______________  **Age:** ______  **Date:** __________
 
-## Section A — Tester Profile
-
-| Field | |
-|-------|--|
-| Name | ____________________________ |
-| Age | ____________ |
-| Date | ____________ |
-| Role | ____________________________ |
-| Background | ☐ Cybersecurity student  ☐ Junior security analyst  ☐ IT / security staff  ☐ Other: __________ |
-| Security-tool experience | ☐ None  ☐ Some  ☐ Experienced |
-
-## Section B — Tasks (tick when completed)
-
-| # | Task | Completed | Needed help? |
-|---|------|:---------:|:------------:|
-| 1 | Register an account and log in. | ☐ | Yes ☐ No ☐ |
-| 2 | Upload a scanner report and run the triage pipeline. | ☐ | Yes ☐ No ☐ |
-| 3 | From the dashboard, state how many findings are Confirmed vs the total. | ☐ | Yes ☐ No ☐ |
-| 4 | Open a Confirmed finding and explain, in your own words, why it was confirmed. | ☐ | Yes ☐ No ☐ |
-| 5 | Run an Auto Scan against the authorised target (acknowledging the authorisation control). | ☐ | Yes ☐ No ☐ |
-| 6 | Generate and download the PDF report (including the AI-assisted analysis). | ☐ | Yes ☐ No ☐ |
-
-## Section C — User Interface (rate 1–5)
+**Security-tool experience:**  None  /  Some  /  Experienced  *(circle one)*
 
 *Scale: 1 = Strongly disagree · 2 = Disagree · 3 = Neutral · 4 = Agree · 5 = Strongly agree*
 
-| Criterion | 1 | 2 | 3 | 4 | 5 |
-|-----------|:-:|:-:|:-:|:-:|:-:|
-| I. The dashboard layout is clear and well-organised. | ☐ | ☐ | ☐ | ☐ | ☐ |
-| II. The colour-coded severity indicators are easy to interpret. | ☐ | ☐ | ☐ | ☐ | ☐ |
-| III. Navigation between Upload, Findings, and Reports is intuitive. | ☐ | ☐ | ☐ | ☐ | ☐ |
-| IV. The charts and KPI cards present the triage summary clearly. | ☐ | ☐ | ☐ | ☐ | ☐ |
-| V. The finding-detail view is readable and well-structured. | ☐ | ☐ | ☐ | ☐ | ☐ |
-| VI. Buttons, forms, and controls are obvious and easy to use. | ☐ | ☐ | ☐ | ☐ | ☐ |
-| VII. The overall look and feel is professional. | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Please tick (✓) one column per row | 1 | 2 | 3 | 4 | 5 |
+|------------------------------------|:-:|:-:|:-:|:-:|:-:|
+| **A · USER INTERFACE & USABILITY** | | | | | |
+| 1. The dashboard layout is clear and well-organised. | | | | | |
+| 2. The colour-coded severity indicators are easy to interpret. | | | | | |
+| 3. Navigation between Upload, Findings and Reports is intuitive. | | | | | |
+| 4. The charts and KPI cards present the triage summary clearly. | | | | | |
+| 5. The finding-detail view is readable and well-structured. | | | | | |
+| 6. Buttons, forms and controls are obvious and easy to use. | | | | | |
+| 7. The overall look and feel is professional. | | | | | |
+| **B · FUNCTIONALITY** | | | | | |
+| 8. Registering an account and logging in worked without error. | | | | | |
+| 9. Uploading a scanner report (ZAP / Nuclei / Nessus) and running the triage worked without error. | | | | | |
+| 10. Findings were triaged and classified automatically after upload. | | | | | |
+| 11. The system handled invalid input / an unsupported file gracefully. | | | | | |
+| 12. The Auto Scan authorisation control made the scope and consent clear. | | | | | |
+| 13. The PDF report generated and downloaded successfully. | | | | | |
+| **C · TRIAGE VALUE (the system's core purpose)** | | | | | |
+| 14. The confidence score and rationale helped me judge whether a finding is real. | | | | | |
+| 15. The Confirmed / Needs-Verification / Not-Confirmed classification is clear and useful. | | | | | |
+| 16. The AI-assisted analysis (risk explanation and suggested fix) helped me understand the vulnerability. | | | | | |
+| 17. Deduplication correctly merged the same finding reported by multiple scanners. | | | | | |
+| 18. The generated report is suitable to hand to a stakeholder. | | | | | |
+| 19. Overall, the system reduces the manual effort of triaging scanner output. | | | | | |
+| **D · OVERALL ACCEPTANCE** | | | | | |
+| 20. I accept this system as usable and fit for its purpose. | | | | | |
+| 21. I would recommend this system to others who triage scanner output. | | | | | |
 
-## Section D — General Functionality (Yes / No)
-
-| Criterion | Yes | No |
-|-----------|:---:|:--:|
-| I. The system registers a new account and logs in without error. | ☐ | ☐ |
-| II. A scanner report (ZAP / Nuclei / Nessus) can be uploaded and processed without error. | ☐ | ☐ |
-| III. Findings are triaged and classified automatically after upload. | ☐ | ☐ |
-| IV. The system responds appropriately to invalid input or an unsupported file. | ☐ | ☐ |
-| V. The PDF report generates and downloads successfully. | ☐ | ☐ |
-
-## Section E — Triage / Analyst Functionality (Yes / No)
-
-| Criterion | Yes | No |
-|-----------|:---:|:--:|
-| I. The confidence score and rationale help me judge whether a finding is real. | ☐ | ☐ |
-| II. The Confirmed / Needs-Verification / Not-Confirmed classification is clear and useful. | ☐ | ☐ |
-| III. The AI-assisted analysis (risk explanation and suggested fix) helps me understand the vulnerability. | ☐ | ☐ |
-| IV. Deduplication correctly merges the same finding reported by multiple scanners. | ☐ | ☐ |
-| V. The Auto Scan authorisation control makes the scope and consent clear. | ☐ | ☐ |
-| VI. The generated report is suitable to hand to a stakeholder. | ☐ | ☐ |
-| VII. Overall, the system reduces the manual effort of triaging scanner output. | ☐ | ☐ |
-
-## Section F — Overall Acceptance
-
-| Statement | Yes | No |
-|-----------|:---:|:--:|
-| I accept this system as usable and fit for its purpose. | ☐ | ☐ |
-| I would recommend this system to others who triage scanner output. | ☐ | ☐ |
-
-## Section G — Comments & Suggestions
-
-________________________________________________________________
+**Comments & suggestions**
 
 ________________________________________________________________
 
