@@ -3,7 +3,7 @@
 > **Project:** VulnTriage — AI-Assisted Vulnerability Triage and Confirmation System Using ML and Multi-Scanner Analysis
 > **Testing techniques used (two):** (1) **White-box testing** — automated unit and integration testing that covers *every* component of the system, together with the machine-learning model evaluation and live system/functional verification; and (2) **User Acceptance Testing (UAT)** — an acceptance-form evaluation carried out with the intended target audience.
 >
-> *The white-box test cases in §5.3.1 are taken directly from the project's own automated test suite — every row corresponds to a real, passing assertion (96 tests in total). The UAT form and per-tester results in §5.2.2.2 and §5.3.2 form a complete, ready-to-run acceptance instrument; the tester ratings are left as clearly-marked blank cells to be filled with genuine data from at least three real testers, so that no results are fabricated.*
+> *The white-box test cases in §5.4.1 are taken directly from the project's own automated test suite — every row corresponds to a real, passing assertion (96 tests in total). The UAT form and per-tester results in §5.3.2.2 and §5.4.2 form a complete, ready-to-run acceptance instrument; the tester ratings are left as clearly-marked blank cells to be filled with genuine data from at least three real testers, so that no results are fabricated.*
 
 ---
 
@@ -16,13 +16,33 @@ Several testing methods can be employed in the testing phase, including unit tes
 1. **White-box testing** — structural testing that uses knowledge of the internal code to verify each engine, parser, and model against a known-correct output. This technique is applied as an automated unit-and-integration test suite that covers every component of the system, extended with a quantitative evaluation of the machine-learning model and a live end-to-end verification of the whole pipeline. It answers the question *"does each component compute the right answer?"*.
 2. **User Acceptance Testing (UAT)** — validation by real end users who perform representative tasks and then rate the system against a set of acceptance criteria on a structured form. It answers the question *"can the intended user work with the system, and do they accept it?"*.
 
-Section 5.2 explains the selection and design of both techniques; Section 5.3 reports and discusses their execution and results; and Section 5.4 summarises the outcome.
+Section 5.2 sets out the test plan; Section 5.3 explains the selection and design of both techniques; Section 5.4 reports and discusses their execution and results; and Section 5.5 summarises the outcome.
 
 ---
 
-## 5.2 Testing Selection and Design
+## 5.2 Test Plan
 
-### 5.2.1 Selection of Suitable Testing
+Before any testing was carried out, a test plan was drawn up to define *what* would be tested, *how*, *by whom*, *in what environment*, and against *what criteria* a test is considered to pass. This gives the testing phase a clear, auditable structure and ensures that both the internal correctness of the system and its acceptability to real users are covered. The plan is summarised in the table below; the detailed design of each technique follows in §5.3, and the executed results are reported in §5.4.
+
+| Element | Description |
+|---------|-------------|
+| **Test objectives** | Verify that every component of the system produces correct output; quantify the machine-learning model's accuracy and the Confidence Engine's behaviour; confirm the full pipeline works end-to-end against a live target; and establish that the intended users find the finished system usable and acceptable. |
+| **Scope (in)** | The back-end engines and pipeline (parsing, normalisation, deduplication, CWE mapping, NVD enrichment, CWE→CVSS inference, exploit search, ML prioritiser, Confidence Engine, PoC validator, Auto Scan, report generation, AI-assisted analysis, data management); the machine-learning model; the Confidence Engine; the end-to-end triage workflow; and the web-application user interface. |
+| **Scope (out)** | The internal workings of the third-party scanners (OWASP ZAP, Nuclei, Nessus) and of the external LLM providers; production-scale load and performance; and multi-tenant/enterprise access control. |
+| **Testing techniques** | (1) **White-box testing** — automated unit and integration testing, plus machine-learning model evaluation and live functional/system verification; (2) **User Acceptance Testing (UAT)** — an acceptance-form evaluation conducted with representative end users. |
+| **Test environment** | Automated tests run under **pytest** with an in-memory SQLite database; all external dependencies (LLM providers, the live NVD API, and the network) are mocked for deterministic, reproducible runs. Functional verification and the confidence evaluation use a local **OWASP Juice Shop** as the authorised, deliberately-vulnerable target. UAT is performed in a modern web browser. Host platform: Kali Linux. |
+| **Test data** | 21,697 real, held-out NVD records for the ML evaluation; a real OWASP ZAP + Nuclei scan of OWASP Juice Shop (20 findings) for the pipeline and Confidence Engine evaluation; and representative ZAP/Nuclei/Nessus reports for the parser and integration tests. |
+| **Participants** | The developer conducts the white-box testing. UAT is conducted with **at least three (3) testers** drawn from the target audience — cybersecurity students, junior security analysts, and IT security staff. |
+| **Pass / fail criteria** | *White-box:* a test passes when the actual output equals the expected output; the suite passes only when **all** tests pass. *ML model:* accuracy and macro-F1 reported on the held-out set, with no gross (multi-band) misclassifications. *Confidence Engine:* on the real scan, every PoC-confirmed finding is classified *Confirmed* and all technology-detection noise is classified *Informational*. *UAT:* a criterion is accepted when its mean rating is ≥ 4 out of 5 (or its positive response proportion is high) and testers accept the system overall. |
+| **Approach / schedule** | White-box tests are written and re-run continuously during development and again before release; the ML and confidence evaluations are run against the saved model and a stored real scan; UAT is conducted once the system is feature-complete. |
+| **Deliverables** | The automated test suite and its pass report; the ML evaluation output; the real-scan confidence evaluation; the live functional-verification table; and the completed UAT forms with an acceptance summary. |
+| **Assumptions / risks** | All testing is authorised and confined to the provided practice target; the AI-assisted analysis requires a provider key and degrades gracefully without one; and the UAT sample is small, so it establishes acceptability rather than statistically-powered usability. |
+
+---
+
+## 5.3 Testing Selection and Design
+
+### 5.3.1 Selection of Suitable Testing
 
 Figure 5.1 shows how the two selected techniques combine into the overall evaluation. White-box testing validates the internal logic of every component, the ML model, and the integrated pipeline; UAT validates the finished system's acceptability with real users. Together they establish both correctness and acceptance.
 
@@ -47,21 +67,21 @@ flowchart TB
 
 **Figure 5.1: Overall Testing Approach — Two Complementary Techniques**
 
-#### 5.2.1.1 White-Box Testing
+#### 5.3.1.1 White-Box Testing
 
 White-box testing (also called structural or glass-box testing) is a technique in which the tester has full knowledge of the internal structure of the code and designs test cases to exercise that structure directly. It was selected as the primary technique for verifying correctness because the value of VulnTriage lives in the internal logic of its components — the scanner parsers, the placeholder/CWE normalisation, the HTML sanitiser, the CWE keyword mapper, the NVD enrichment, the CWE→CVSS inference, the exploit search, the Random Forest prioritiser, the six-factor Confidence Engine, the PoC validator, the Auto Scan orchestration, the report generator, the AI-assisted analysis, and the data-management routines. Each of these is a well-defined transformation with a knowable correct output, which makes it ideal for automated, assertion-based testing that can be re-run at any time to prove the logic still behaves correctly. White-box testing is applied here at three levels: **unit testing** (a single component or helper in isolation), **integration testing** (several components cooperating through the database), and **model/system verification** (quantifying the ML model on real held-out data and driving the whole pipeline against a live target).
 
-#### 5.2.1.2 User Acceptance Testing
+#### 5.3.1.2 User Acceptance Testing
 
 User Acceptance Testing (UAT) is the validation process, performed before a system is considered ready for use, in which actual end users verify that the product functions as intended and meets their needs in realistic scenarios. It was selected as the second technique because correctness alone does not make a tool adopted — a security analyst must be able to *operate* the system and *trust* its output. UAT places the finished system in front of representative users, has them perform the real analyst workflow (upload → triage → interpret → report) with the developer present for guidance, and then has them rate the system against a set of acceptance criteria covering the user interface and the functionality. Documenting the tester profile, the criteria, and the outcomes provides traceable evidence of acceptance.
 
-### 5.2.2 Testing Design
+### 5.3.2 Testing Design
 
-#### 5.2.2.1 White-Box Testing Design
+#### 5.3.2.1 White-Box Testing Design
 
 The white-box tests are written with the **pytest** framework and run with a single command (`cd backend && python -m pytest`). They use an in-memory SQLite database bound at application creation, and all external dependencies — the LLM providers, the live NVD API, and the network — are mocked, so the entire suite runs deterministically in a few seconds with no API key, no internet, and no external service. This is what makes the results reproducible by any examiner.
 
-Every component of the system is covered by its own group of test cases. Each test case is recorded in a table with the following columns: a **Test Case ID**, a **Description** of what is being tested, the **Test Condition** (the input or state), the **Expected Output**, the **Actual Output**, and the **Pass/Fail** verdict. Test cases were designed to cover the *normal path*, *boundary conditions*, and *known failure modes* (regression tests). The fourteen component groups and the number of test cases in each are listed in Table 5.1; the full per-component tables, with their executed results, appear in §5.3.1.
+Every component of the system is covered by its own group of test cases. Each test case is recorded in a table with the following columns: a **Test Case ID**, a **Description** of what is being tested, the **Test Condition** (the input or state), the **Expected Output**, the **Actual Output**, and the **Pass/Fail** verdict. Test cases were designed to cover the *normal path*, *boundary conditions*, and *known failure modes* (regression tests). The fourteen component groups and the number of test cases in each are listed in Table 5.1; the full per-component tables, with their executed results, appear in §5.4.1.
 
 | # | Component group | Module | Test cases |
 |---|-----------------|--------|:----------:|
@@ -83,7 +103,7 @@ Every component of the system is covered by its own group of test cases. Each te
 
 **Table 5.1: White-Box Test Coverage by Component**
 
-#### 5.2.2.2 User Acceptance Testing Design
+#### 5.3.2.2 User Acceptance Testing Design
 
 For the design of the user acceptance testing, the testing uses a **form format** that the tester fills in after using the system. The form begins with the tester's demographic profile to identify the tester, then covers the **user-interface criteria** (rated on a 1–5 satisfaction scale), the **general functionality criteria** (Yes/No), and the **analyst functionality criteria** specific to VulnTriage's purpose (Yes/No). A free-text comment field and a signature line complete the form.
 
@@ -144,9 +164,9 @@ The blank UAT form used for every tester is shown in Table 5.2.
 
 ---
 
-## 5.3 System Testing and Discussion
+## 5.4 System Testing and Discussion
 
-### 5.3.1 White-Box Testing Execution
+### 5.4.1 White-Box Testing Execution
 
 The complete pytest suite was executed with `python -m pytest`. **All 96 tests pass.** The per-component results are recorded in Tables 5.3–5.16 below, one table per component group, in the order listed in Table 5.1. Every row corresponds to a real assertion in the test suite; because the suite is deterministic and passes in full, the Actual Output matches the Expected Output in every case ("As expected") and every verdict is Pass.
 
@@ -430,9 +450,9 @@ The result is a clean real-world separation. All **5 findings that the PoC valid
 
 **Table 5.20: Live Functional / System Verification Results**
 
-### 5.3.2 User Acceptance Testing Execution
+### 5.4.2 User Acceptance Testing Execution
 
-> **Note.** This section provides the per-tester acceptance forms to be completed by the **≥ 3 real testers** recruited per §5.2.2.2. The rating and Yes/No cells are left blank (shown as "—") for the testers to complete during the session; they are **not** filled with fabricated data. An acceptance-summary template (Table 5.24) aggregates the outcomes once collected.
+> **Note.** This section provides the per-tester acceptance forms to be completed by the **≥ 3 real testers** recruited per §5.3.2.2. The rating and Yes/No cells are left blank (shown as "—") for the testers to complete during the session; they are **not** filled with fabricated data. An acceptance-summary template (Table 5.24) aggregates the outcomes once collected.
 
 Each tester performed the analyst workflow with the developer present and then completed the acceptance form. Their individual results are recorded in the forms below.
 
@@ -480,17 +500,17 @@ Each tester performed the analyst workflow with the developer present and then c
 
 **Table 5.24: UAT Acceptance Summary (to be completed)**
 
-### 5.3.3 Testing Discussion
+### 5.4.3 Testing Discussion
 
 The two techniques together evaluate VulnTriage on both of the axes identified in §5.1.
 
 **White-box testing** established the correctness of every component with reproducible evidence. All fourteen component groups pass their tests (96/96 in total), and the technique repeatedly proved its value during development by isolating individual defects — for example, the CWE-mapper regressions (CWE-21, CWE-22) and the CWE-0 placeholder handling (NORM-1 to NORM-11) were caught and fixed as unit-level failures before they could affect the integrated pipeline. The machine-learning model generalises with 99.68% accuracy on unseen real data, with only benign off-by-one-band errors. Most importantly, the Confidence Engine was validated on a **real target**: on the actual OWASP Juice Shop scan (Table 5.19, Figures 5.5–5.6) it placed all five objectively PoC-confirmed findings — including the actively-exploited SQL injection — in the Confirmed band (mean 79.5) while demoting every technology-detection noise item to Informational (mean 11.8), a clean real-world separation. The live verification (Table 5.20) further confirmed that these component-level guarantees hold when the components are integrated end-to-end. An honest limitation is that a single clean scan contains few outright scanner false positives, so the real-target evaluation demonstrates the engine's prioritisation of genuine findings above noise rather than false-positive *suppression* in isolation, and the ML task (predicting a severity band from CVSS sub-metrics) is close to deterministic; both points are stated plainly so the strong numbers are not over-claimed. The genuinely novel value therefore lies in the confidence-scoring and false-positive-suppression behaviour, which the results support.
 
-**User Acceptance Testing** was conducted with [___] target-audience testers (to be completed), each of whom performed the full analyst workflow with the developer present and then rated the system against the acceptance criteria. *[Once the forms in §5.3.2 are collected, discuss the results here: relate the mean UI rating and the functionality "Yes" proportions to how intuitive and useful testers found the system; highlight which analyst-specific features (e.g. the confidence rationale, the AI-assisted analysis) testers valued, drawing on their comments; and, if any criterion fell below the acceptance threshold, identify the interface or feature responsible and state the improvement made in response. This closes the loop between testing and design.]*
+**User Acceptance Testing** was conducted with [___] target-audience testers (to be completed), each of whom performed the full analyst workflow with the developer present and then rated the system against the acceptance criteria. *[Once the forms in §5.4.2 are collected, discuss the results here: relate the mean UI rating and the functionality "Yes" proportions to how intuitive and useful testers found the system; highlight which analyst-specific features (e.g. the confidence rationale, the AI-assisted analysis) testers valued, drawing on their comments; and, if any criterion fell below the acceptance threshold, identify the interface or feature responsible and state the improvement made in response. This closes the loop between testing and design.]*
 
 ---
 
-## 5.4 Summary
+## 5.5 Summary
 
 In this chapter, the completed VulnTriage system was evaluated using two complementary testing techniques. **White-box testing** provided objective, reproducible evidence of correctness across *every component of the system*: all **96 automated unit and integration tests pass** (Tables 5.3–5.16, one table per component), the machine-learning prioritiser achieves **99.68% accuracy (macro-F1 0.9941)** on 21,697 unseen real records with only benign off-by-one-band errors, and the Confidence Engine was validated on a **real OWASP Juice Shop scan** where it placed all five objectively PoC-confirmed findings (including the actively-exploited SQL injection) in the Confirmed band and every technology-detection noise item in the Informational band — a clean real-world separation. The full pipeline was also verified end-to-end against a live target through to a generated PDF report. **User Acceptance Testing** was conducted with at least three representative testers (cybersecurity students, junior analysts, and IT security staff), who performed the real analyst workflow and rated the system against an acceptance form covering the user interface, the general functionality, and the analyst-specific functionality; the completed forms and acceptance summary record their verdict.
 
