@@ -135,6 +135,13 @@ class PocValidator:
         """Select and run the best-fit validation for this finding."""
         vtype = self._select_type(finding)
 
+        # Re-validation REPLACES this finding's prior PoC results instead of
+        # appending. Without this, repeated pipeline runs pile up duplicate rows
+        # in the report (e.g. a failed run while the target was down, followed by
+        # a successful one, would show both the stale errors and the real result).
+        PocValidation.query.filter_by(finding_id=finding.id).delete(
+            synchronize_session=False)
+
         # Authorisation gate: never send probes to an out-of-scope host.
         if finding.url and not self._in_scope(finding.url):
             host = urlparse(finding.url).hostname

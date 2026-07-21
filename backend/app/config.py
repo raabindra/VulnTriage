@@ -20,7 +20,7 @@ class Config:
     }
 
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
-    ALLOWED_EXTENSIONS = {"xml", "json", "csv", "nessus"}
+    ALLOWED_EXTENSIONS = {"xml", "json", "jsonl", "csv", "nessus"}
     MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", 52428800))
 
     NVD_API_KEY = os.environ.get("NVD_API_KEY", "")

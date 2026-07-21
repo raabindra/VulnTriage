@@ -10,7 +10,7 @@ import { useEffect } from 'react'
 
 const SCANNERS = [
   { value: 'zap',    label: 'OWASP ZAP',  ext: '.xml' },
-  { value: 'nuclei', label: 'Nuclei',      ext: '.json' },
+  { value: 'nuclei', label: 'Nuclei',      ext: '.json, .jsonl' },
   { value: 'nessus', label: 'Nessus',      ext: '.nessus' },
 ]
 
@@ -57,7 +57,7 @@ export default function Upload() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     multiple: false,
-    accept: { 'text/xml': ['.xml'], 'application/json': ['.json'], 'application/octet-stream': ['.nessus'] },
+    accept: { 'text/xml': ['.xml'], 'application/json': ['.json', '.jsonl'], 'application/octet-stream': ['.nessus'] },
   })
 
   async function handleDelete(id) {

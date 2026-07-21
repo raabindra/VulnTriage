@@ -35,7 +35,7 @@ def get_scanner_type(filename: str) -> str | None:
     name = filename.lower()
     if "zap" in name or name.endswith(".xml"):
         return "zap"
-    if "nuclei" in name or name.endswith(".json"):
+    if "nuclei" in name or name.endswith((".json", ".jsonl")):
         return "nuclei"
     if name.endswith(".nessus") or "nessus" in name:
         return "nessus"
