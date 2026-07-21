@@ -7,8 +7,27 @@ import pytest
 from app import db
 from app.engines import auto_scan
 from app.engines.auto_scan import AutoScanOrchestrator, AutoScanError
-from app.engines.scanner_runner import scanner_availability
+from app.engines.scanner_runner import scanner_availability, normalise_target
 from app.models.user import User
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("https://juice-shop.herokuapp.com/#/", "https://juice-shop.herokuapp.com/"),
+    ("http://localhost:3000/#/dashboard", "http://localhost:3000/"),
+    ("localhost:3000", "http://localhost:3000"),          # scheme defaulted
+    ("  http://x.test/app/#/a  ", "http://x.test/app/"),   # trimmed + fragment dropped
+    ("http://ok.test/?q=1", "http://ok.test/?q=1"),        # query preserved, unchanged
+])
+def test_normalise_target_strips_fragment_and_defaults_scheme(raw, expected):
+    assert normalise_target(raw) == expected
+
+
+def test_normalise_target_makes_zap_includepaths_regex_safe():
+    from app.engines.scanner_runner import _zap_plan
+    plan = _zap_plan(normalise_target("https://juice-shop.herokuapp.com/#/"), "/tmp/o")
+    # no raw '#/' fragment leaks into the ZAP context, and dots are escaped
+    assert "#/" not in plan
+    assert r"juice\-shop\.herokuapp\.com" in plan
 
 _SAMPLE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))),  # FYP/

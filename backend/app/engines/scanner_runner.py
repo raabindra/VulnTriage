@@ -20,9 +20,11 @@ read (ZAP XML, Nuclei JSONL), or raises ScannerError.
 """
 
 import os
+import re
 import shutil
 import socket
 import subprocess
+from urllib.parse import urlsplit, urlunsplit
 
 # Tool locations (allow override via env for non-standard installs).
 ZAP_BIN = os.environ.get("ZAP_BIN") or shutil.which("zaproxy") or shutil.which("zap.sh")
@@ -51,6 +53,29 @@ SUPPORTED_SCANNERS = ("zap", "nuclei")
 
 class ScannerError(RuntimeError):
     pass
+
+
+def normalise_target(target: str) -> str:
+    """Clean a user-supplied target URL before handing it to a scanner.
+
+    - trims surrounding whitespace;
+    - defaults the scheme to ``http://`` when omitted (e.g. ``localhost:3000``);
+    - **drops any URL fragment** (``#/...``). A fragment is a client-side SPA
+      route that is never sent to the server; if it is left on the target it
+      poisons ZAP's context ``includePaths`` regex (which is built from the
+      target) so no crawled server URL matches the scope, and the active scan
+      finds nothing. Stripping it here fixes the common "0 findings" case when a
+      user pastes a single-page-app URL such as ``.../#/``.
+
+    The function is idempotent, so it is safe to call more than once.
+    """
+    if not target or not target.strip():
+        return target
+    t = target.strip()
+    if "://" not in t:
+        t = "http://" + t
+    p = urlsplit(t)
+    return urlunsplit((p.scheme, p.netloc, p.path, p.query, ""))  # fragment dropped
 
 
 # ───────────────────────── availability ─────────────────────────
@@ -114,7 +139,7 @@ env:
   contexts:
     - name: target
       urls: ["{target}"]
-      includePaths: ["{target}.*"]
+      includePaths: ["{re.escape(target)}.*"]
   parameters:
     failOnError: false
     progressToStdout: true
@@ -207,4 +232,4 @@ def run_scanner(name: str, target: str, out_dir: str) -> str:
             f"{', '.join(SUPPORTED_SCANNERS)}. (Nessus: export a .nessus report "
             f"from the Nessus UI and upload it instead.)")
     os.makedirs(out_dir, exist_ok=True)
-    return runner(target, out_dir)
+    return runner(normalise_target(target), out_dir)

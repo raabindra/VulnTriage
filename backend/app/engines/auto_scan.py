@@ -21,7 +21,8 @@ from app import db
 from app.models.user import User
 from app.models.scanner_upload import ScannerUpload
 from app.parsers import parse_scanner_file
-from app.engines.scanner_runner import run_scanner, ScannerError, scanner_availability
+from app.engines.scanner_runner import (
+    run_scanner, ScannerError, scanner_availability, normalise_target)
 
 from app.engines.normalisation import NormalisationEngine
 from app.engines.deduplication import DeduplicationEngine
@@ -47,6 +48,10 @@ class AutoScanOrchestrator:
             raise AutoScanError("active scanning not authorised — pass authorise=True")
         if not scanners:
             raise AutoScanError("no scanners selected")
+
+        # Clean the target once (drop SPA '#/...' fragment, default the scheme) so
+        # every scanner, the emitted progress, and the stored result agree on it.
+        target = normalise_target(target)
 
         def emit(msg):
             if progress:
