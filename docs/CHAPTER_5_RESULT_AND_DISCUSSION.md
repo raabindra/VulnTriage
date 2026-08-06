@@ -97,7 +97,7 @@ Every component of the system is covered by its own group of test cases. Each te
 | 10 | PoC validator (active confirmation + scope) | `test_poc_validator.py` | 5 |
 | 11 | Auto Scan orchestration | `test_auto_scan.py` | 5 |
 | 12 | Report generation (escaping / rendering) | `test_report_escaping.py` | 2 |
-| 13 | AI-assisted analysis (Gemini / Claude) | `test_ai_summary.py` | 7 |
+| 13 | AI-assisted analysis (Gemini) | `test_ai_summary.py` | 7 |
 | 14 | Data management (session reset) | `test_clear_data.py` | 2 |
 | | **Total** | | **96** |
 
@@ -346,7 +346,7 @@ The complete pytest suite was executed with `python -m pytest`. **All 96 tests p
 | Test Case ID | Description | Test Condition | Expected Output | Actual Output | Pass/Fail |
 |---|---|---|---|---|---|
 | AI-1 | Disabled without a key | no provider key set | engine disabled; `summarise` returns `None` | As expected | Pass |
-| AI-2 | Parse a Claude response (mocked) | mocked Anthropic client | structured summary JSON returned | As expected | Pass |
+| AI-2 | Parse a Gemini response (mocked) | mocked Gemini client | structured summary JSON returned | As expected | Pass |
 | AI-3 | Degrade gracefully on error | provider raises an exception | returns `None` (no crash) | As expected | Pass |
 | AI-4 | Empty findings | no findings to summarise | returns `None` | As expected | Pass |
 | AI-5 | Render the AI report section | valid summary JSON | list of report flowables (> 3) | As expected | Pass |

@@ -132,7 +132,7 @@ data-completeness fixes above, not reweighting. Recorded in `WRITEUP_NOTES.md`.
 
 | Path | Purpose |
 |---|---|
-| `CLAUDE.md` | Authoritative design/instructions for the codebase. |
+| `ARCHITECTURE.md` | Authoritative design/instructions for the codebase. |
 | `WRITEUP_NOTES.md` | Honest evaluation framings for the dissertation. |
 | `docs/CHAPTER_4_DESIGN_AND_IMPLEMENTATION.md` | Chapter 4 (Markdown + Mermaid + screenshots). |
 | `docs/Chapter_4_Design_and_Implementation.docx` | Word build of Chapter 4. |
